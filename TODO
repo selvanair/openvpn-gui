@@ -7,3 +7,5 @@ TODOs for OpenVPN-GUI
 * convert boolean registry values from string to dword
 * maybe parse config and use selected options in command line directly
 * have some kind of error log instead of message boxes for low level errors
+
+* remove external manifest

@@ -29,8 +29,7 @@
 /* Language resource files are UTF-8 encoded */
 #pragma code_page(65001)
 
-/* Manifest for XP visual styles */
-CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "openvpn-gui.manifest"
+/* Manifest now distributed as external -- do not include here */
 
 /* Application Icons */
 ID_ICO_APP           ICON  DISCARDABLE  "openvpn-gui.ico"
