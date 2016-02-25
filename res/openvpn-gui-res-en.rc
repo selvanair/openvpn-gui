@@ -244,6 +244,7 @@ BEGIN
     IDS_MENU_CLOSE "Exit"
     IDS_MENU_CONNECT "Connect"
     IDS_MENU_DISCONNECT "Disconnect"
+    IDS_MENU_RECONNECT "Reconnect"
     IDS_MENU_STATUS "Show Status"
     IDS_MENU_VIEWLOG "View Log"
     IDS_MENU_EDITCONFIG "Edit Config"
@@ -452,5 +453,7 @@ BEGIN
     /* Token password related */
     IDS_NFO_TOKEN_PASSWORD_CAPTION "OpenVPN - Token Password"
     IDS_NFO_TOKEN_PASSWORD_REQUEST "Input Password/PIN for Token '%S'"
+
+    IDS_NFO_CLICK_HERE_TO_START "Right click here to start"
 
 END

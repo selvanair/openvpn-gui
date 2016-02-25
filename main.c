@@ -55,6 +55,10 @@
 #include <openssl/err.h>
 #endif
 
+#define OVPN_EXITCODE_ERROR      1
+#define OVPN_EXITCODE_TIMEOUT    2
+#define OVPN_EXITCODE_NOTREADY   3
+
 /*  Declare Windows procedure  */
 LRESULT CALLBACK WindowProcedure (HWND, UINT, WPARAM, LPARAM);
 static void ShowSettingsDialog();
@@ -100,7 +104,6 @@ VerifyAutoConnections()
     return TRUE;
 }
 
-
 int WINAPI _tWinMain (HINSTANCE hThisInstance,
                     UNUSED HINSTANCE hPrevInstance,
                     UNUSED LPTSTR lpszArgument,
@@ -109,6 +112,16 @@ int WINAPI _tWinMain (HINSTANCE hThisInstance,
   MSG messages;            /* Here messages to the application are saved */
   WNDCLASSEX wincl;        /* Data structure for the windowclass */
   DWORD shell32_version;
+  BOOL first_instance = TRUE;
+  /* a session local semaphore to detect second instance */
+  HANDLE session_semaphore = InitSemaphore(L"Local\\"PACKAGE_NAME);
+
+  /* try to lock the semaphore, else we are not the first instance */
+  if (session_semaphore &&
+      WaitForSingleObject(session_semaphore, 0) != WAIT_OBJECT_0)
+  {
+      first_instance = FALSE;
+  }
 
   /* Initialize handlers for manangement interface notifications */
   mgmt_rtmsg_handler handler[] = {
@@ -167,21 +180,54 @@ int WINAPI _tWinMain (HINSTANCE hThisInstance,
 #endif
 
 
-  /* Check if a previous instance is already running. */
-  if ((FindWindow (szClassName, NULL)) != NULL)
-    {
-        /* GUI already running */
-        ShowLocalizedMsg(IDS_ERR_GUI_ALREADY_RUNNING);
-        exit(1);
-    }
-
-  UpdateRegistry(); /* Checks version change and update keys/values */
+  if (first_instance)
+      UpdateRegistry(); /* Checks version change and update keys/values */
 
   GetRegistryKeys();
   /* Parse command-line options */
   ProcessCommandLine(&o, GetCommandLine());
 
   EnsureDirExists(o.config_dir);
+
+  /* Check if a previous instance has a window initialized
+   * Even if we are not the first instance this may return null
+   * if the previous instance has not fully started up
+   */
+  HANDLE hwnd_master = FindWindow (szClassName, NULL);
+  if (hwnd_master)
+    {
+      /* GUI already running -- send a message if any action is pecified, else show the balloon*/
+      COPYDATASTRUCT config_data = {0};
+      int timeout = 30*1000; /* 30 seconds */
+      int exit_code = 0;
+      if (!o.action)
+      {
+         o.action = WM_OVPN_NOTIFY;
+         o.action_arg = LoadLocalizedString(IDS_NFO_CLICK_HERE_TO_START);
+      }
+      config_data.dwData = o.action;
+      if (o.action_arg)
+      {
+         config_data.cbData = (wcslen(o.action_arg)+1)*sizeof(o.action_arg[0]);
+         config_data.lpData = (void *) o.action_arg;
+      }
+      PrintDebug(L"Instance 2: called with action %d : %s", o.action, o.action_arg);
+      if (!SendMessageTimeout (hwnd_master, WM_COPYDATA, 0, (LPARAM) &config_data, 0, timeout, NULL))
+         exit_code = OVPN_EXITCODE_TIMEOUT;
+
+      PrintDebug(L"Instance 2: Returning exit code %d", exit_code);
+      exit(exit_code);
+    }
+  else if (!first_instance)
+    {
+      PrintDebug(L"Instance 2: Previous instance not yet ready to accept comamnds");
+      exit (OVPN_EXITCODE_NOTREADY);
+    }
+  else if (first_instance && o.action)
+    {
+      PrintDebug(L"Instance 1: Called with --command when no previous instance available");
+      exit (OVPN_EXITCODE_ERROR);
+    }
 
   if (!CheckVersion()) {
     exit(1);
@@ -200,6 +246,7 @@ int WINAPI _tWinMain (HINSTANCE hThisInstance,
   if (!VerifyAutoConnections()) {
     exit(1);
   }
+
   GetProxyRegistrySettings();
 
 #ifndef DISABLE_CHANGE_PASSWORD
@@ -373,6 +420,11 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
         SendMessage(hwnd, WM_SETICON, (WPARAM) (ICON_BIG), (LPARAM) (hIcon));
       }
 
+      /* Accept WM_COPYDATA messages: this may be needed in Windows 7+? */
+#if 0
+      ChangeWindowMessageFilterEx(hwnd, WM_COPYDATA, MSGFLT_ALLOW, NULL);
+#endif
+
       CreatePopupMenus();	/* Create popup menus */  
       ShowTrayIcon();
       if (o.service_only)
@@ -387,6 +439,67 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
       OnNotifyTray(lParam); 	// Manages message from tray
       break;
 
+    case WM_COPYDATA:   // custom messages with data from other processes
+      {
+        COPYDATASTRUCT *copy_data = (COPYDATASTRUCT *) lParam;
+        WCHAR *str = NULL;
+        connection_t *c = NULL;
+        PrintDebug (L"WM_COPYDATA message received. (dwData: %lu, cbData: %lu, lpData: %s)",
+                      copy_data->dwData, copy_data->cbData, copy_data->lpData);
+        if (copy_data->cbData >= sizeof(WCHAR) && copy_data->lpData)
+        {
+          /* sanity check on received data */
+          str = (WCHAR*) copy_data->lpData;
+          str[copy_data->cbData/sizeof(WCHAR)-1] = L'\0';
+          c = GetConnByName(str);
+        }
+        if(copy_data->dwData == WM_OVPN_START && c)
+        {
+          if (!o.silent_connection)
+              ForceForegroundWindow(hwnd);
+          StartOpenVPN(c);
+        }
+        else if(copy_data->dwData == WM_OVPN_STOP && c)
+          StopOpenVPN(c);
+        else if(copy_data->dwData == WM_OVPN_RESTART && c)
+        {
+          if (!o.silent_connection)
+              ForceForegroundWindow(hwnd);
+          RestartOpenVPN(c);
+        }
+        else if(copy_data->dwData == WM_OVPN_SHOWSTATUS && c->hwndStatus && c)
+        {
+          ForceForegroundWindow(hwnd);
+          ShowWindow(c->hwndStatus, SW_SHOW);
+        }
+        else if(copy_data->dwData == WM_OVPN_STOPALL && c)
+          StopAllOpenVPN();
+        else if(copy_data->dwData == WM_OVPN_SILENT && str)
+        {
+            if (_wtoi(str) == 0)
+                o.silent_connection = 0;
+            else
+                o.silent_connection = 1;
+        }
+        else if(copy_data->dwData == WM_OVPN_EXIT)
+        {
+          StopAllOpenVPN();
+          SendMessage(hwnd, WM_CLOSE, 0, 0);
+        }
+        else if(copy_data->dwData == WM_OVPN_IMPORT)
+          /* Not yet implemented */
+          break;
+        else if (copy_data->dwData == WM_OVPN_NOTIFY)
+        {
+          ShowTrayBalloon(L"", copy_data->lpData);
+        }
+        else
+          PrintDebug (L"WM_COPYDATA message ignored. (dwData: %lu, cbData: %lu)",
+                      copy_data->dwData, copy_data->cbData);
+        return TRUE; /* indicate we handled the message and the sender can free copy_data */
+      }
+      break;
+
     case WM_COMMAND:
       if ( (LOWORD(wParam) >= IDM_CONNECTMENU) && (LOWORD(wParam) < IDM_CONNECTMENU + MAX_CONFIGS) ) {
         StartOpenVPN(&o.conn[LOWORD(wParam) - IDM_CONNECTMENU]);
@@ -394,8 +507,8 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
       if ( (LOWORD(wParam) >= IDM_DISCONNECTMENU) && (LOWORD(wParam) < IDM_DISCONNECTMENU + MAX_CONFIGS) ) {
         StopOpenVPN(&o.conn[LOWORD(wParam) - IDM_DISCONNECTMENU]);
       }
-      if ( (LOWORD(wParam) >= IDM_RESTARTMENU) && (LOWORD(wParam) < IDM_RESTARTMENU + MAX_CONFIGS) ) {
-        RestartOpenVPN(&o.conn[LOWORD(wParam) - IDM_RESTARTMENU]);
+      if ( (LOWORD(wParam) >= IDM_RECONNECTMENU) && (LOWORD(wParam) < IDM_RECONNECTMENU + MAX_CONFIGS) ) {
+        RestartOpenVPN(&o.conn[LOWORD(wParam) - IDM_RECONNECTMENU]);
       }
       if ( (LOWORD(wParam) >= IDM_STATUSMENU) && (LOWORD(wParam) < IDM_STATUSMENU + MAX_CONFIGS) ) {
         ShowWindow(o.conn[LOWORD(wParam) - IDM_STATUSMENU].hwndStatus, SW_SHOW);
