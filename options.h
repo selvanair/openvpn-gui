@@ -40,8 +40,6 @@ typedef struct connection connection_t;
  * including the option name itself.
  */
 #define MAX_PARMS           5   /* May number of parameters per option */
-#define MAX_CONFIG_SUBDIRS  50  /* Max number of subdirs to scan for configs */
-
 
 typedef enum {
     service_noaccess     = -1,
@@ -112,15 +110,30 @@ struct connection {
     HANDLE exit_event;
     DWORD threadId;
     HWND hwndStatus;
+    HMENU hMenuConn;
+    int index;
+    connection_t *next;
 };
+
+connection_t *
+NewConnection (void);
+
+void
+DeleteConnection(connection_t *c);
+
+connection_t *
+GetConnByFile (const TCHAR *file);
+
+connection_t *
+GetConnById (int index);
 
 /* All options used within OpenVPN GUI */
 typedef struct {
     /* Array of configs to autostart */
-    const TCHAR *auto_connect[MAX_CONFIGS];
+    const TCHAR *auto_connect[MAX_AUTO_CONNECT];
 
     /* Connection parameters */
-    connection_t conn[MAX_CONFIGS];   /* Connection structure */
+    connection_t *conn;             /* List of connection structures */
     int num_configs;                  /* Number of configs */
 
     service_state_t service_state;    /* State of the OpenVPN Service */

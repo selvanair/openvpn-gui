@@ -73,13 +73,13 @@ VerifyAutoConnections()
     int i;
     BOOL match;
 
-    for (i = 0; o.auto_connect[i] != 0 && i < MAX_CONFIGS; i++)
+    for (i = 0; o.auto_connect[i] != 0 && i < MAX_AUTO_CONNECT; i++)
     {
-        int j;
+        connection_t *c;
         match = FALSE;
-        for (j = 0; j < MAX_CONFIGS; j++)
+        for (c = o.conn; c; c = c->next)
         {
-            if (_tcsicmp(o.conn[j].config_file, o.auto_connect[i]) == 0)
+            if (_tcsicmp(c->config_file, o.auto_connect[i]) == 0)
             {
                 match = TRUE;
                 break;
@@ -254,12 +254,13 @@ int WINAPI _tWinMain (HINSTANCE hThisInstance,
 static void
 StopAllOpenVPN()
 {
+    connection_t *c;
     int i;
 
-    for (i = 0; i < o.num_configs; i++)
+    for (c = o.conn; c; c = c->next)
     {
-        if (o.conn[i].state != disconnected)
-            StopOpenVPN(&o.conn[i]);
+        if (c->state != disconnected)
+            StopOpenVPN(c);
     }
 
     /* Wait for all connections to terminate (Max 5 sec) */
@@ -274,12 +275,15 @@ StopAllOpenVPN()
 static int
 AutoStartConnections()
 {
-    int i;
+    connection_t *c;
 
-    for (i = 0; i < o.num_configs; i++)
+    for (c = o.conn; c; c = c->next)
     {
-        if (o.conn[i].auto_connect)
-            StartOpenVPN(&o.conn[i]);
+#ifdef DEBUG
+       PrintDebug (L"Checking autostart on %s  autostart = %d", c->config_name, c->auto_connect);
+#endif
+        if (c->auto_connect)
+            StartOpenVPN(c);
     }
 
     return TRUE;
@@ -289,15 +293,17 @@ AutoStartConnections()
 static void
 ResumeConnections()
 {
-    int i;
-    for (i = 0; i < o.num_configs; i++) {
+    connection_t *c;
+
+    for (c = o.conn; c; c = c->next)
+    {
         /* Restart suspend connections */
-        if (o.conn[i].state == suspended)
-            StartOpenVPN(&o.conn[i]);
+        if (c->state == suspended)
+            StartOpenVPN(c);
 
         /* If some connection never reached SUSPENDED state */
-        if (o.conn[i].state == suspending)
-            StopOpenVPN(&o.conn[i]);
+        if (c->state == suspending)
+            StopOpenVPN(c);
     }
 }
 
@@ -329,6 +335,9 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
       ShowTrayIcon();
       if (o.allow_service[0]=='1' || o.service_only[0]=='1')
         CheckServiceStatus();	// Check if service is running or not
+#ifdef DEBUG
+       PrintDebug (L"In WM_CREATE calling autostart");
+#endif
       if (!AutoStartConnections()) {
         SendMessage(hwnd, WM_CLOSE, 0, 0);
         break;
@@ -340,24 +349,27 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
       break;
 
     case WM_COMMAND:
-      if ( (LOWORD(wParam) >= IDM_CONNECTMENU) && (LOWORD(wParam) < IDM_CONNECTMENU + MAX_CONFIGS) ) {
-        StartOpenVPN(&o.conn[LOWORD(wParam) - IDM_CONNECTMENU]);
+#ifdef DEBUG
+       PrintDebug (L"In WM_COMMAND with wParam(loword) = %lu index = %lu", LOWORD(wParam), HIWORD(wParam));
+#endif
+      if ( (LOWORD(wParam) == IDM_CONNECTMENU)) {
+        StartOpenVPN(GetConnById(HIWORD(wParam)));
       }
-      if ( (LOWORD(wParam) >= IDM_DISCONNECTMENU) && (LOWORD(wParam) < IDM_DISCONNECTMENU + MAX_CONFIGS) ) {
-        StopOpenVPN(&o.conn[LOWORD(wParam) - IDM_DISCONNECTMENU]);
+      if ( (LOWORD(wParam) == IDM_DISCONNECTMENU)) {
+        StopOpenVPN(GetConnById(HIWORD(wParam)));
       }
-      if ( (LOWORD(wParam) >= IDM_STATUSMENU) && (LOWORD(wParam) < IDM_STATUSMENU + MAX_CONFIGS) ) {
-        ShowWindow(o.conn[LOWORD(wParam) - IDM_STATUSMENU].hwndStatus, SW_SHOW);
+      if ( (LOWORD(wParam) == IDM_STATUSMENU)) {
+        ShowWindow(GetConnById(HIWORD(wParam))->hwndStatus, SW_SHOW);
       }
-      if ( (LOWORD(wParam) >= IDM_VIEWLOGMENU) && (LOWORD(wParam) < IDM_VIEWLOGMENU + MAX_CONFIGS) ) {
-        ViewLog(LOWORD(wParam) - IDM_VIEWLOGMENU);
+      if ( (LOWORD(wParam) == IDM_VIEWLOGMENU)) {
+        ViewLog(HIWORD(wParam));
       }
-      if ( (LOWORD(wParam) >= IDM_EDITMENU) && (LOWORD(wParam) < IDM_EDITMENU + MAX_CONFIGS) ) {
-        EditConfig(LOWORD(wParam) - IDM_EDITMENU);
+      if ( (LOWORD(wParam) == IDM_EDITMENU)) {
+        EditConfig(HIWORD(wParam));
       }
 #ifndef DISABLE_CHANGE_PASSWORD
-      if ( (LOWORD(wParam) >= IDM_PASSPHRASEMENU) && (LOWORD(wParam) < IDM_PASSPHRASEMENU + MAX_CONFIGS) ) {
-        ShowChangePassphraseDialog(&o.conn[LOWORD(wParam) - IDM_PASSPHRASEMENU]);
+      if ( (LOWORD(wParam) == IDM_PASSPHRASEMENU)) {
+        ShowChangePassphraseDialog(GetConnById(HIWORD(wParam)));
       }
 #endif
       if (LOWORD(wParam) == IDM_IMPORT) {
@@ -416,10 +428,12 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
           if (o.disconnect_on_suspend[0] == '1')
             {
               /* Suspend running connections */
-              for (i=0; i<o.num_configs; i++)
+                connection_t *c;
+
+                for (c = o.conn; c; c = c->next)
                 {
-                  if (o.conn[i].state == connected)
-                SuspendOpenVPN(i);
+                    if (c->state == connected)
+                    SuspendOpenVPN(c->index);
                 }
 
               /* Wait for all connections to suspend */
@@ -521,14 +535,15 @@ void
 CloseApplication(HWND hwnd)
 {
     int i;
+    connection_t *c;
 
     if (o.service_state == service_connected
     && ShowLocalizedMsgEx(MB_YESNO, _T("Exit OpenVPN"), IDS_NFO_SERVICE_ACTIVE_EXIT) == IDNO)
             return;
 
-    for (i = 0; i < o.num_configs; i++)
+    for (c = o.conn; c; c = c->next)
     {
-        if (o.conn[i].state == disconnected)
+        if (c->state == disconnected)
             continue;
 
         /* Ask for confirmation if still connected */

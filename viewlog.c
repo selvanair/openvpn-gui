@@ -43,13 +43,16 @@ void ViewLog(int config)
   PROCESS_INFORMATION proc_info;
   SECURITY_ATTRIBUTES sa;
   SECURITY_DESCRIPTOR sd;
+  connection_t *c = GetConnById(config);
 
   CLEAR (start_info);
   CLEAR (proc_info);
   CLEAR (sa);
   CLEAR (sd);
 
-  _sntprintf_0(filename, _T("%s \"%s\""), o.log_viewer, o.conn[config].log_path);
+  if (!c) return; /* BUG ().. */
+
+  _sntprintf_0(filename, _T("%s \"%s\""), o.log_viewer, c->log_path);
 
   /* fill in STARTUPINFO struct */
   GetStartupInfo(&start_info);
@@ -87,13 +90,16 @@ void EditConfig(int config)
   PROCESS_INFORMATION proc_info;
   SECURITY_ATTRIBUTES sa;
   SECURITY_DESCRIPTOR sd;
+  connection_t *c = GetConnById(config);
 
   CLEAR (start_info);
   CLEAR (proc_info);
   CLEAR (sa);
   CLEAR (sd);
 
-  _sntprintf_0(filename, _T("%s \"%s\\%s\""), o.editor, o.conn[config].config_dir, o.conn[config].config_file);
+  if (!c) return; /* BUG ().. */
+
+  _sntprintf_0(filename, _T("%s \"%s\\%s\""), o.editor, c->config_dir, c->config_file);
 
   /* fill in STARTUPINFO struct */
   GetStartupInfo(&start_info);
@@ -110,7 +116,7 @@ void EditConfig(int config)
 		     TRUE,
 		     CREATE_NEW_CONSOLE,
 		     NULL,
-		     o.conn[config].config_dir,	//start-up dir
+		     c->config_dir,	//start-up dir
 		     &start_info,
 		     &proc_info))
     {

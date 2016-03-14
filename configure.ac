@@ -38,11 +38,11 @@ AC_ARG_ENABLE(
 	[enable_distonly="no"]
 )
 
-AC_ARG_VAR([MAX_CONFIGS], [specify the maximum number of configs @<:@default=50@:>@])
-if test -z "$MAX_CONFIGS"; then
-	MAX_CONFIGS=50
+AC_ARG_VAR([MAX_AUTO_CONNECT], [specify the maximum number of auto connect configs @<:@default=50@:>@])
+if test -z "$MAX_AUTO_CONNECT"; then
+	MAX_AUTO_CONNECT=50
 fi
-AC_DEFINE_UNQUOTED([MAX_CONFIGS], [$MAX_CONFIGS], [Maximum number of config files supported.])
+AC_DEFINE_UNQUOTED([MAX_AUTO_CONNECT], [$MAX_AUTO_CONNECT], [Maximum number of auto connect config files supported.])
 
 AC_ARG_VAR([ARCH], [override the CPU architecture for the NSIS installer])
 test "x$ARCH" = "x" && ARCH=${host%%-*}

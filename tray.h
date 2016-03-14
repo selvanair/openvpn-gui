@@ -36,11 +36,11 @@
 #define IDM_IMPORT              224
 
 #define IDM_CONNECTMENU         300
-#define IDM_DISCONNECTMENU      (MAX_CONFIGS + IDM_CONNECTMENU)
-#define IDM_STATUSMENU          (MAX_CONFIGS + IDM_DISCONNECTMENU)
-#define IDM_VIEWLOGMENU         (MAX_CONFIGS + IDM_STATUSMENU)
-#define IDM_EDITMENU            (MAX_CONFIGS + IDM_VIEWLOGMENU)
-#define IDM_PASSPHRASEMENU      (MAX_CONFIGS + IDM_EDITMENU)
+#define IDM_DISCONNECTMENU      310
+#define IDM_STATUSMENU          320
+#define IDM_VIEWLOGMENU         330
+#define IDM_EDITMENU            340
+#define IDM_PASSPHRASEMENU      350
 
 void CreatePopupMenus();
 void OnNotifyTray(LPARAM);

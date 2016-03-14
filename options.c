@@ -54,10 +54,10 @@ add_option(options_t *options, int i, TCHAR **p)
     {
         ++i;
         static int auto_connect_nr = 0;
-        if (auto_connect_nr == MAX_CONFIGS)
+        if (auto_connect_nr == MAX_AUTO_CONNECT)
         {
             /* Too many configs */
-            ShowLocalizedMsg(IDS_ERR_MANY_CONFIGS, MAX_CONFIGS);
+            ShowLocalizedMsg(IDS_ERR_MANY_CONFIGS, MAX_AUTO_CONNECT);
             exit(1);
         }
         options->auto_connect[auto_connect_nr++] = p[1];
@@ -284,12 +284,12 @@ ProcessCommandLine(options_t *options, TCHAR *command_line)
 int
 CountConnState(conn_state_t check)
 {
-    int i;
     int count = 0;
+    connection_t *c;
 
-    for (i = 0; i < o.num_configs; ++i)
+    for (c = o.conn; c; c = c->next)
     {
-        if (o.conn[i].state == check)
+        if (c->state == check)
             ++count;
     }
 
@@ -299,11 +299,58 @@ CountConnState(conn_state_t check)
 connection_t*
 GetConnByManagement(SOCKET sk)
 {
-    int i;
-    for (i = 0; i < o.num_configs; ++i)
+    connection_t *c;
+
+    for (c = o.conn; c; c = c->next)
     {
-        if (o.conn[i].manage.sk == sk)
-            return &o.conn[i];
+        if (c->manage.sk == sk)
+            return c;
     }
     return NULL;
+}
+
+connection_t *
+NewConnection (void)
+{
+    connection_t *c = calloc (1,sizeof(connection_t));
+    if (!c)
+        return NULL;
+    c->next = o.conn;
+    o.conn = c;
+
+    return c;
+}
+
+connection_t *
+GetConnByFile (const TCHAR *file)
+{
+    connection_t *c = NULL;
+    for (c = o.conn;  c; c = c->next)
+    {
+        if (_tcscmp(c->config_file, file) == 0)
+            break;
+    }
+    return (c);
+}
+
+connection_t *
+GetConnById (int index)
+{
+    connection_t *c = NULL;
+    for (c = o.conn;  c; c = c->next)
+    {
+        if (c->index == index) break;
+    }
+    return (c);
+}
+
+void
+DeleteConnection (connection_t *c)
+{
+    if (c)
+    {
+        if (c->hMenuConn)
+            DestroyMenu (c->hMenuConn);
+        free (c);
+    }
 }

@@ -46,7 +46,7 @@ int MyStartService()
   DWORD dwOldCheckPoint; 
   DWORD dwStartTickCount;
   DWORD dwWaitTime;
-  int i;
+  connection_t *c;
 
     /* Set Service Status = Connecting */
     o.service_state = service_connecting;
@@ -77,8 +77,8 @@ int MyStartService()
     }
  
     /* Run Pre-connect script */
-    for (i=0; i<o.num_configs; i++)
-        RunPreconnectScript(&o.conn[i]);
+    for (c = o.conn; c; c = c->next)
+        RunPreconnectScript(c);
 
     if (!StartService(
             schService,  // handle to service 
@@ -156,8 +156,8 @@ int MyStartService()
     } 
 
     /* Run Connect script */
-    for (i=0; i<o.num_configs; i++)    
-      RunConnectScript(&o.conn[i], true);
+    for (c = o.conn; c; c = c->next)
+      RunConnectScript(c, true);
 
     /* Set Service Status = Connected */
     o.service_state = service_connected;
@@ -184,7 +184,7 @@ int MyStopService()
   SC_HANDLE schSCManager;
   SC_HANDLE schService;
   SERVICE_STATUS ssStatus; 
-  int i;
+  connection_t *c;
 
     // Open a handle to the SC Manager database. 
     schSCManager = OpenSCManager( 
@@ -210,8 +210,8 @@ int MyStopService()
     }
 
     /* Run DisConnect script */
-    for (i=0; i<o.num_configs; i++)    
-      RunDisconnectScript(&o.conn[i], true);
+    for (c = o.conn; c; c = c->next)
+      RunDisconnectScript(c, true);
 
     if (!ControlService( 
             schService,   // handle to service 
