@@ -251,7 +251,16 @@ OnManagement(SOCKET sk, LPARAM lParam)
             char *line = data + offset;
             size_t line_size = data_size - offset;
 
-            pos = memchr(line, (*c->manage.password ? ':' : '\n'), line_size);
+            if (memcmp (line, "ENTER PASSWORD:", 15) == 0)
+            {
+                UnqueueCommand (c); /* remove any previously send passwords */
+                ManagementCommand(c, c->manage.password, NULL, regular);
+                CLEAR(c->manage.password);
+                offset += 15;
+                continue;
+            }
+
+            pos = memchr(line, '\n', line_size);
             if (pos == NULL)
             {
                 c->manage.saved_data = malloc(line_size);
@@ -264,14 +273,6 @@ OnManagement(SOCKET sk, LPARAM lParam)
             }
 
             offset += (pos - line) + 1;
-
-            /* Reply to a management password request */
-            if (*c->manage.password)
-            {
-                ManagementCommand(c, c->manage.password, NULL, regular);
-                *c->manage.password = '\0';
-                continue;
-            }
 
             /* Handle regular management interface output */
             line[pos - line - 1] = '\0';
