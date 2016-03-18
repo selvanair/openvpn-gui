@@ -50,6 +50,7 @@
 
 #define WM_OVPN_STOP    (WM_APP + 10)
 #define WM_OVPN_SUSPEND (WM_APP + 11)
+#define WM_OVPN_HOLD    (WM_APP + 12)
 
 extern options_t o;
 
@@ -68,10 +69,25 @@ typedef struct {
 void
 OnReady(connection_t *c, UNUSED char *msg)
 {
+    PrintDebug (L"<OnReady: \"%s\" state = %d", c->config_name, c->state);
+    if (c->flags & FLAG_PRESTARTED)
+    {
+        /* state is unknown until determined by OnHold or state change */
+        c->state = -1;
+        ManagementCommand(c, "state", OnStateChange, regular);
+    }
     ManagementCommand(c, "state on", NULL, regular);
-    ManagementCommand(c, "log all on", OnLogLine, combined);
+    ManagementCommand(c, "log on 50", OnLogLine, combined);
+    PrintDebug (L">OnReady: \"%s\" state = %d", c->config_name, c->state);
 }
 
+void
+HoldRelease (connection_t *c)
+{
+    PrintDebug (L"<HoldRelease: \"%s\" state = %d", c->config_name, c->state);
+    ManagementCommand(c, "hold off", NULL, regular);
+    ManagementCommand(c, "hold release", NULL, regular);
+}
 
 /*
  * Handle the request to release a hold from the OpenVPN management interface
@@ -79,8 +95,25 @@ OnReady(connection_t *c, UNUSED char *msg)
 void
 OnHold(connection_t *c, UNUSED char *msg)
 {
-    ManagementCommand(c, "hold off", NULL, regular);
-    ManagementCommand(c, "hold release", NULL, regular);
+    PrintDebug (L"<OnHold: \"%s\" state = %d", c->config_name, c->state);
+    if (c->flags & FLAG_PRESTARTED)
+    {
+        /* stay in hold state until user initiates connect */
+        PrintDebug(L"Prestarted config \"%s\": put on hold", c->config_name);
+        c->failed_psw_attempts = 0;
+        c->state = onhold;
+        CheckAndSetTrayIcon();
+        SetMenuStatus (c, onhold);
+        SetDlgItemText (c->hwndStatus, ID_TXT_STATUS, LoadLocalizedString(IDS_NFO_STATE_SUSPENDED));
+        EnableWindow(GetDlgItem(c->hwndStatus, ID_DISCONNECT), TRUE);
+        EnableWindow(GetDlgItem(c->hwndStatus, ID_RESTART), FALSE);
+        SetStatusWinIcon(c->hwndStatus, ID_ICO_DISCONNECTED);
+        SendMessage (GetDlgItem(c->hwndStatus, ID_DISCONNECT), WM_SETTEXT, 0,
+           (LPARAM) LoadLocalizedString (IDS_MENU_CONNECT));
+    }
+    else
+        HoldRelease (c);
+    PrintDebug (L">OnHold: \"%s\" state = %d", c->config_name, c->state);
 }
 
 /*
@@ -105,6 +138,9 @@ OnLogLine(connection_t *c, char *line)
 
     message = strchr(flags, ',') + 1;
     if (message - 1 == NULL)
+        return;
+
+    if (strncmp (message, "MANAGEMENT:", 11) == 0)
         return;
 
     /* Remove lines from log window if it is getting full */
@@ -136,6 +172,8 @@ OnStateChange(connection_t *c, char *data)
 {
     char *pos, *state, *message;
 
+    PrintDebug (L"<OnStateChange: \"%s\" state = %d", c->config_name, c->state);
+
     pos = strchr(data, ',');
     if (pos == NULL)
         return;
@@ -152,6 +190,9 @@ OnStateChange(connection_t *c, char *data)
     if (pos == NULL)
         return;
     *pos = '\0';
+
+    if (c->state == onhold)
+        return;
 
     if (strcmp(state, "CONNECTED") == 0)
     {
@@ -188,9 +229,23 @@ OnStateChange(connection_t *c, char *data)
 
         SetDlgItemText(c->hwndStatus, ID_TXT_STATUS, LoadLocalizedString(IDS_NFO_STATE_CONNECTED));
         SetStatusWinIcon(c->hwndStatus, ID_ICO_CONNECTED);
+        EnableWindow(GetDlgItem(c->hwndStatus, ID_DISCONNECT), TRUE);
+        EnableWindow(GetDlgItem(c->hwndStatus, ID_RESTART), TRUE);
 
         /* Hide Status Window */
         ShowWindow(c->hwndStatus, SW_HIDE);
+        PrintDebug (L"Config \"%s\" connected to VPN server", c->config_name);
+    }
+    else if ( (c->state != connecting) &&
+             (strcmp(state, "WAIT") == 0 ||
+             strcmp(state, "AUTH") == 0 ||
+             strcmp(state, "GET_CONFIG") == 0 ||
+             strcmp(state, "ASSIGN_IP") == 0 ))
+    {
+        c->state = connecting;
+        SetMenuStatus(c, connecting);
+        SetTrayIcon(connecting);
+        SetDlgItemText(c->hwndStatus, ID_TXT_STATUS, LoadLocalizedString(IDS_NFO_STATE_CONNECTING));
     }
     else if (strcmp(state, "RECONNECTING") == 0)
     {
@@ -198,7 +253,13 @@ OnStateChange(connection_t *c, char *data)
         ||  strcmp(message, "private-key-password-failure") == 0)
             c->failed_psw_attempts++;
 
-        if (c->failed_psw_attempts >= o.psw_attempts - 1)
+        if (c->flags & FLAG_PRESTARTED && c->failed_psw_attempts > 0)
+        {
+            StopOpenVPN (c);
+            PrintDebug (L"Config \"%s\" user-auth or password failed", c->config_name);
+            return;
+        }
+        else if (c->failed_psw_attempts >= o.psw_attempts - 1)
             ManagementCommand(c, "auth-retry none", NULL, regular);
 
         c->state = reconnecting;
@@ -206,7 +267,9 @@ OnStateChange(connection_t *c, char *data)
 
         SetDlgItemText(c->hwndStatus, ID_TXT_STATUS, LoadLocalizedString(IDS_NFO_STATE_RECONNECTING));
         SetStatusWinIcon(c->hwndStatus, ID_ICO_CONNECTING);
+        PrintDebug (L"Config \"%s\" reconnecting to VPN server", c->config_name);
     }
+    PrintDebug (L">OnStateChange: \"%s\" state = %d", c->config_name, c->state);
 }
 
 
@@ -266,8 +329,18 @@ UserAuthDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             return TRUE;
 
         case IDCANCEL:
-            EndDialog(hwndDlg, LOWORD(wParam));
-            StopOpenVPN(param->c);
+            /* send dummy user and password to avoid termination */
+            if (param->c->flags & FLAG_PRESTARTED)
+            {
+                ManagementCommand(param->c, "username \"Auth\" ...", NULL, regular);
+                ManagementCommand(param->c, "password \"Auth\" ...", NULL, regular);
+                EndDialog(hwndDlg, LOWORD(wParam));
+            }
+            else
+            {
+                EndDialog(hwndDlg, LOWORD(wParam));
+                StopOpenVPN(param->c);
+            }
             return TRUE;
         }
         break;
@@ -318,6 +391,9 @@ PrivKeyPassDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             return TRUE;
 
         case IDCANCEL:
+            /* Send a dummy password to avoid termintion of openvpn */
+            if (c->flags & FLAG_PRESTARTED)
+                ManagementCommand(c, "password \"Private Key\" ...", NULL, regular);
             EndDialog(hwndDlg, LOWORD(wParam));
             return TRUE;
         }
@@ -336,7 +412,7 @@ PrivKeyPassDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
 
 
 /*
- * Handle the request to release a hold from the OpenVPN management interface
+ * Handle the request for Password from the OpenVPN management interface
  */
 void
 OnPassword(connection_t *c, char *msg)
@@ -385,6 +461,9 @@ OnStop(connection_t *c, UNUSED char *msg)
 {
     UINT txt_id, msg_id;
     TCHAR *msg_xtra;
+
+    PrintDebug (L"<OnStop: \"%s\" state = %d", c->config_name, c->state);
+
     SetMenuStatus(c, disconnected);
 
     switch (c->state)
@@ -418,9 +497,8 @@ OnStop(connection_t *c, UNUSED char *msg)
         if (c->state == timedout)
             msg_id = IDS_NFO_CONN_TIMEOUT;
 
-        c->state = disconnecting;
-        CheckAndSetTrayIcon();
         c->state = disconnected;
+        CheckAndSetTrayIcon();
         EnableWindow(GetDlgItem(c->hwndStatus, ID_DISCONNECT), FALSE);
         EnableWindow(GetDlgItem(c->hwndStatus, ID_RESTART), FALSE);
         SetStatusWinIcon(c->hwndStatus, ID_ICO_DISCONNECTED);
@@ -432,24 +510,11 @@ OnStop(connection_t *c, UNUSED char *msg)
         }
         ShowLocalizedMsg(msg_id, msg_xtra);
         SendMessage(c->hwndStatus, WM_CLOSE, 0, 0);
+        PrintDebug(L"Config \"%s\" failed to connect", c->config_name);
         break;
 
+    case onhold:
     case disconnecting:
-//   /* Check for "certificate has expired" message */
-//   if ((strstr(line, "error=certificate has expired") != NULL))
-//     {
-//       StopOpenVPN(config);
-//       /* Cert expired... */
-//       ShowLocalizedMsg(IDS_ERR_CERT_EXPIRED);
-//     }
-//
-//   /* Check for "certificate is not yet valid" message */
-//   if ((strstr(line, "error=certificate is not yet valid") != NULL))
-//     {
-//       StopOpenVPN(config);
-//       /* Cert not yet valid */
-//       ShowLocalizedMsg(IDS_ERR_CERT_NOT_YET_VALID);
-//     }
         /* Shutdown was initiated by us */
         c->failed_psw_attempts = 0;
         c->state = disconnected;
@@ -466,6 +531,7 @@ OnStop(connection_t *c, UNUSED char *msg)
     default:
         break;
     }
+    PrintDebug (L">OnStop: \"%s\" state = %d", c->config_name, c->state);
 }
 
 /*
@@ -660,7 +726,7 @@ OnService(connection_t *c, UNUSED char *msg)
         free (buf);
         return;
     }
- 
+
     p = buf + 11;
     while (iswspace(*p)) ++p;
 
@@ -671,10 +737,6 @@ OnService(connection_t *c, UNUSED char *msg)
         p = next;
     }
     free (buf);
-
-    /* Handle the error only if management is not connected */
-    if (c->manage.connected)
-        return;
 
     /* Error from iservice before management interface is connected */
     switch (err)
@@ -703,22 +765,19 @@ OnService(connection_t *c, UNUSED char *msg)
 static void
 OnProcess (connection_t *c, UNUSED char *msg)
 {
-    if (!c->manage.connected)
-    {
-        DWORD err;
-        WCHAR tmp[256];
+    DWORD err;
+    WCHAR tmp[256];
 
-        if (!GetExitCodeProcess(c->hProcess, &err) || err == STILL_ACTIVE)
-            return;
+    if (!GetExitCodeProcess(c->hProcess, &err) || err == STILL_ACTIVE)
+        return;
 
-        _snwprintf(tmp, _countof(tmp),  L"OpenVPN terminated with exit code %lu. "
-                                        L"See the log file for details", err);
-        tmp[_countof(tmp)-1] = L'\0';
-        WriteStatusLog(c, L"OpenVPN GUI> ", tmp, false);
+    _snwprintf(tmp, _countof(tmp),  L"OpenVPN terminated with exit code %lu. "
+                                    L"See the log file for details", err);
+    tmp[_countof(tmp)-1] = L'\0';
+    WriteStatusLog(c, L"OpenVPN GUI> ", tmp, false);
 
-        c->state = timedout;   /* Force the popup message to include the log file name */
-        OnStop (c, NULL);
-    }
+    c->state = timedout;   /* Force the popup message to include the log file name */
+    OnStop (c, NULL);
 }
 
 /*
@@ -727,6 +786,7 @@ OnProcess (connection_t *c, UNUSED char *msg)
 static void
 Cleanup (connection_t *c)
 {
+    CloseManagement (c);
     if (c->hProcess)
         CloseHandle (c->hProcess);
     else
@@ -736,6 +796,7 @@ Cleanup (connection_t *c)
     if (c->exit_event)
         CloseHandle (c->exit_event);
     c->exit_event = NULL;
+    c->state = disconnected;
 }
 
 /*
@@ -792,6 +853,8 @@ StatusDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         MoveWindow(GetDlgItem(hwndDlg, ID_DISCONNECT), 20, rect.bottom - 30, 110, 23, TRUE);
         MoveWindow(GetDlgItem(hwndDlg, ID_RESTART), 145, rect.bottom - 30, 110, 23, TRUE);
         MoveWindow(GetDlgItem(hwndDlg, ID_HIDE), rect.right - 130, rect.bottom - 30, 110, 23, TRUE);
+        EnableWindow(GetDlgItem(c->hwndStatus, ID_DISCONNECT), FALSE);
+        EnableWindow(GetDlgItem(c->hwndStatus, ID_RESTART), FALSE);
 
         /* Set focus on the LogWindow so it scrolls automatically */
         SetFocus(hLogWnd);
@@ -812,7 +875,11 @@ StatusDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         {
         case ID_DISCONNECT:
             SetFocus(GetDlgItem(c->hwndStatus, ID_EDT_LOG));
-            StopOpenVPN(c);
+            /* this buton toggles between connect and disconnect when put on hold */
+            if (c->state == onhold && c->flags & FLAG_PRESTARTED)
+                ConnectOpenVPN(c);
+            else
+                StopOpenVPN(c);
             return TRUE;
 
         case ID_HIDE:
@@ -825,6 +892,8 @@ StatusDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         case ID_RESTART:
             c->state = reconnecting;
             SetFocus(GetDlgItem(c->hwndStatus, ID_EDT_LOG));
+            EnableWindow(GetDlgItem(c->hwndStatus, ID_DISCONNECT), FALSE);
+            EnableWindow(GetDlgItem(c->hwndStatus, ID_RESTART), FALSE);
             ManagementCommand(c, "signal SIGHUP", NULL, regular);
             return TRUE;
         }
@@ -891,15 +960,17 @@ ThreadOpenVPNStatus(void *p)
         PostMessage(c->hwndStatus, WM_CLOSE, 0, 0);
 
     /* Start the async read loop for service and set it as the wait event */
-    if (!c->hProcess)
+    if (c->flags & FLAG_PRESTARTED)
+        wait_event = c->iserv.hEvent; /* dummy event that never signals */
+    else if (c->hProcess)
+        wait_event = c->hProcess;
+    else
     {
         HandleServiceIO (0, 0, (LPOVERLAPPED) &c->iserv);
         wait_event = c->iserv.hEvent;
     }
-    else
-        wait_event = c->hProcess;
 
-    if (o.silent_connection[0] == '0')
+    if (o.silent_connection[0] == '0' && !(c->flags & FLAG_PRESTARTED))
         ShowWindow(c->hwndStatus, SW_SHOW);
 
     /* Run the message loop for the status window */
@@ -916,7 +987,6 @@ ThreadOpenVPNStatus(void *p)
                 else
                     OnService (c, NULL);
             }
-            continue;
         }
 
         if (msg.hwnd == NULL)
@@ -941,6 +1011,19 @@ ThreadOpenVPNStatus(void *p)
                 SetDlgItemText(c->hwndStatus, ID_TXT_STATUS, LoadLocalizedString(IDS_NFO_STATE_WAIT_TERM));
                 SetEvent(c->exit_event);
                 break;
+
+             case WM_OVPN_HOLD:
+                if (c->state == onhold || c->state == disconnecting )
+                   break;
+                c->state = disconnecting;
+                RunDisconnectScript(c, false);
+                EnableWindow(GetDlgItem(c->hwndStatus, ID_DISCONNECT), FALSE);
+                EnableWindow(GetDlgItem(c->hwndStatus, ID_RESTART), FALSE);
+                SetMenuStatus(c, disconnecting);
+                SetDlgItemText(c->hwndStatus, ID_TXT_STATUS, LoadLocalizedString(IDS_NFO_STATE_WAIT_TERM));
+                ManagementCommand(c, "hold on", NULL, regular);
+                ManagementCommand(c, "signal SIGHUP", NULL, regular);
+                break;
             }
         }
         else if (IsDialogMessage(c->hwndStatus, &msg) == 0)
@@ -952,6 +1035,8 @@ ThreadOpenVPNStatus(void *p)
 
     /* release handles etc.*/
     Cleanup (c);
+    c->hwndStatus = NULL;
+    PrintDebug (L"Config \"%s\" thread exit", c->config_name);
     return 0;
 }
 
@@ -981,6 +1066,83 @@ SetProcessPriority(DWORD *priority)
 }
 
 /*
+ * Initiate the connection if openvpn is already started (in onhold state)
+ * or start a new process and initiate connection.
+ */
+
+BOOL
+ConnectOpenVPN (connection_t *c)
+{
+   BOOL retval;
+   if (c->state == onhold)
+   {
+        PrintDebug(L"Connecting to prestarted instance \"%s\"", c->config_name);
+        c->state = connecting;
+        CheckAndSetTrayIcon();
+        SetMenuStatus(c, connecting);
+        SetDlgItemText(c->hwndStatus, ID_TXT_STATUS, LoadLocalizedString(IDS_NFO_STATE_CONNECTING));
+        SetStatusWinIcon(c->hwndStatus, ID_ICO_CONNECTING);
+        EnableWindow(GetDlgItem(c->hwndStatus, ID_DISCONNECT), FALSE);
+        EnableWindow(GetDlgItem(c->hwndStatus, ID_RESTART), FALSE);
+        SendMessage (GetDlgItem(c->hwndStatus, ID_DISCONNECT), WM_SETTEXT, 0,
+                     (LPARAM) LoadLocalizedString (IDS_MENU_DISCONNECT));
+        if (o.silent_connection[0] == '0')
+        {
+            SetForegroundWindow(c->hwndStatus);
+            ShowWindow(c->hwndStatus, SW_SHOW);
+        }
+        HoldRelease (c);
+        retval = TRUE;
+   }
+   else if (c->state == disconnected)
+        retval = StartOpenVPN (c);
+   else
+   {
+        PrintDebug(L"ConnectOpenVPN called on config (%s) not ready to connect: state = %d",
+                   c->config_name, c->state);
+        retval = FALSE;
+   }
+   return retval;
+}
+
+/*
+ * Create a thread to manage an already running openvpn instance
+ */
+static BOOL
+StartOpenVPNThread (connection_t *c)
+{
+    HANDLE hThread;
+
+    PrintDebug(L"Starting thread to manage prestarted opnevpn for config \"%s\"", c->config_name);
+
+    c->exit_event = NULL;
+    c->hProcess = NULL;
+    CLEAR (c->iserv);
+    /* dummy event for MsgWaitMultipleObjects */
+    c->iserv.hEvent = CreateEvent (NULL, FALSE, FALSE, NULL);
+    if (!c->iserv.hEvent)
+    {
+        PrintDebug(L"Error creating iserv.hEvent: error = %lu", GetLastError());
+        ShowLocalizedMsg(IDS_ERR_CREATE_EVENT, L"wait event");
+        return FALSE;
+    }
+    c->state = -1; /* unknown state */
+
+    /* Create thread to show the connection's status dialog */
+    hThread = CreateThread(NULL, 0, ThreadOpenVPNStatus, c, 0, &c->threadId);
+    if (hThread == NULL)
+    {
+        CloseHandle (c->iserv.hEvent);
+        ShowLocalizedMsg(IDS_ERR_CREATE_THREAD_STATUS);
+        return FALSE;
+    }
+    else
+        CloseHandle (hThread);
+
+    return TRUE;
+}
+
+/*
  * Launch an OpenVPN process and the accompanying thread to monitor it
  */
 BOOL
@@ -997,6 +1159,8 @@ StartOpenVPN(connection_t *c)
     CLEAR(c->ip);
 
     RunPreconnectScript(c);
+    if (c->flags & FLAG_PRESTARTED)
+        return StartOpenVPNThread (c);
 
     /* Check that log append flag has a valid value */
     if ((o.append_string[0] != '0') && (o.append_string[0] != '1'))
@@ -1028,11 +1192,11 @@ StartOpenVPN(connection_t *c)
     /* Construct command line -- put log first */
     _sntprintf_0(cmdline, _T("openvpn --log%s \"%s\" --config \"%s\" "
         "--setenv IV_GUI_VER \"%S\" --service %s 0 --auth-retry interact "
-        "--management %S %hd stdin --management-query-passwords %s"
+        "--management %s %s stdin --management-query-passwords %s"
         "--management-hold"),
         (o.append_string[0] == '1' ? _T("-append") : _T("")), c->log_path,
         c->config_file, PACKAGE_STRING, exit_event_name,
-        inet_ntoa(c->manage.skaddr.sin_addr), ntohs(c->manage.skaddr.sin_port),
+        c->manage.host, c->manage.port,
         (o.proxy_source != config ? _T("--management-query-proxy ") : _T("")));
 
     /* Try to open the service pipe */
@@ -1041,9 +1205,12 @@ StartOpenVPN(connection_t *c)
         DWORD size = _tcslen(c->config_dir) + _tcslen(options) + sizeof(c->manage.password) + 3;
         TCHAR startup_info[1024];
 
+        PrintDebug(L"Starting openvpn using iservice for config \"%s\"", c->config_name);
+
         if ( !AuthorizeConfig(c))
         {
             CloseHandle(c->exit_event);
+            PrintDebug(L"Config \"%s\" not authorized -- not started", c->config_name);
             goto out;
         }
 
@@ -1069,6 +1236,7 @@ StartOpenVPN(connection_t *c)
         PROCESS_INFORMATION pi;
         SECURITY_DESCRIPTOR sd;
 
+        PrintDebug(L"Starting openvpn directly for config \"%s\"", c->config_name);
         /* Make I/O handles inheritable and accessible by all */
         SECURITY_ATTRIBUTES sa = {
             .nLength = sizeof(sa),
@@ -1164,7 +1332,12 @@ out:
 void
 StopOpenVPN(connection_t *c)
 {
-    PostThreadMessage(c->threadId, WM_OVPN_STOP, 0, 0);
+    if (!c->manage.connected)
+        OnStop(c, NULL);
+    else if (c->flags & FLAG_PRESTARTED)
+        PostThreadMessage(c->threadId, WM_OVPN_HOLD, 0, 0);
+    else
+        PostThreadMessage(c->threadId, WM_OVPN_STOP, 0, 0);
 }
 
 

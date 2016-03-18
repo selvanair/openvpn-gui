@@ -105,6 +105,7 @@ int WINAPI _tWinMain (HINSTANCE hThisInstance,
   MSG messages;            /* Here messages to the application are saved */
   WNDCLASSEX wincl;        /* Data structure for the windowclass */
   DWORD shell32_version;
+  DWORD status;
 
   /* Initialize handlers for manangement interface notifications */
   mgmt_rtmsg_handler handler[] = {
@@ -117,6 +118,8 @@ int WINAPI _tWinMain (HINSTANCE hThisInstance,
       { stop,     OnStop },
       { 0,        NULL }
   };
+  WSADATA wsaData;
+
   InitManagement(handler);
 
   /* initialize options to default state */
@@ -158,6 +161,13 @@ int WINAPI _tWinMain (HINSTANCE hThisInstance,
 #ifdef DEBUG
   PrintDebug(_T("Shell32.dll version: 0x%lx"), shell32_version);
 #endif
+    status = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (status)
+    {
+      PrintDebug(L"WSAStartup Failed with error = %lu", status);
+      MessageBoxW (NULL, L"PACKAGE_NAME", L"Failed to initialize winsocks", MB_OK);
+      exit(1);
+    }
 
 
   /* Parse command-line options */
@@ -259,18 +269,22 @@ StopAllOpenVPN()
 
     for (c = o.conn; c; c = c->next)
     {
-        if (c->state != disconnected)
+        if (c->state != disconnected && !(c->flags & FLAG_PRESTARTED))
             StopOpenVPN(c);
     }
 
     /* Wait for all connections to terminate (Max 5 sec) */
     for (i = 0; i < 20; i++, Sleep(250))
     {
-        if (CountConnState(disconnected) == o.num_configs)
-            break;
+        int count = 0;
+        for (c = o.conn; c; c = c->next)
+        {
+            if (c->state != disconnected && !(c->flags & FLAG_PRESTARTED))
+                count++;
+        }
+        if (count == 0) break;
     }
 }
-
 
 static int
 AutoStartConnections()
@@ -279,16 +293,32 @@ AutoStartConnections()
 
     for (c = o.conn; c; c = c->next)
     {
-#ifdef DEBUG
-       PrintDebug (L"Checking autostart on %s  autostart = %d", c->config_name, c->auto_connect);
-#endif
-        if (c->auto_connect)
+        if (c->state == disconnected && c->flags & (FLAG_AUTO_CONNECT | FLAG_PRESTARTED))
             StartOpenVPN(c);
     }
 
     return TRUE;
 }
 
+/*
+ * Retry connection to the management interface for all configs flagged
+ * as PRESTARTED. This is called periodically from main thread to handle
+ * newly added configs and connections restarted by the service.
+ */
+static void CALLBACK
+PollPrestarted (HWND hwnd, UINT mgs, UINT_PTR id, DWORD time)
+{
+    connection_t *c;
+
+    for (c = o.conn; c; c = c->next)
+    {
+        if (c->state == disconnected && c->hwndStatus == NULL && c->flags & FLAG_PRESTARTED)
+        {
+            PrintDebug (L"Polling MI of config \"%s\"", c->config_name);
+            StartOpenVPN(c);
+        }
+    }
+}
 
 static void
 ResumeConnections()
@@ -335,13 +365,16 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
       ShowTrayIcon();
       if (o.allow_service[0]=='1' || o.service_only[0]=='1')
         CheckServiceStatus();	// Check if service is running or not
-#ifdef DEBUG
-       PrintDebug (L"In WM_CREATE calling autostart");
-#endif
       if (!AutoStartConnections()) {
         SendMessage(hwnd, WM_CLOSE, 0, 0);
         break;
       }
+
+      if (!SetTimer (NULL, 0, 2000, PollPrestarted))
+        PrintDebug (L"Error creating wakeup timer: error = %lu", GetLastError());
+      else
+        PrintDebug (L"Created wakeup timer with hwnd = %llu", hwnd);
+
       break;
     	
     case WM_NOTIFYICONTRAY:
@@ -349,11 +382,8 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
       break;
 
     case WM_COMMAND:
-#ifdef DEBUG
-       PrintDebug (L"In WM_COMMAND with wParam(loword) = %lu index = %lu", LOWORD(wParam), HIWORD(wParam));
-#endif
       if ( (LOWORD(wParam) == IDM_CONNECTMENU)) {
-        StartOpenVPN(GetConnById(HIWORD(wParam)));
+        ConnectOpenVPN(GetConnById(HIWORD(wParam)));
       }
       if ( (LOWORD(wParam) == IDM_DISCONNECTMENU)) {
         StopOpenVPN(GetConnById(HIWORD(wParam)));
@@ -534,7 +564,6 @@ ShowSettingsDialog()
 void
 CloseApplication(HWND hwnd)
 {
-    int i;
     connection_t *c;
 
     if (o.service_state == service_connected
@@ -543,8 +572,9 @@ CloseApplication(HWND hwnd)
 
     for (c = o.conn; c; c = c->next)
     {
-        if (c->state == disconnected)
+        if (c->state == disconnected || c->state == onhold)
             continue;
+        PrintDebug (L"config \"%s\" active on exit", c->config_file);
 
         /* Ask for confirmation if still connected */
         if (ShowLocalizedMsgEx(MB_YESNO, _T("Exit OpenVPN"), IDS_NFO_ACTIVE_CONN_EXIT) == IDNO)

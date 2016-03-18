@@ -149,7 +149,10 @@ BEGIN
           "encryption, packet authentication, and packet compression.\n" \
           "\n" \
           "Copyright (C) 2002-2005 OpenVPN Solutions LLC <info@openvpn.net>\n" \
-          "http://openvpn.net/", 0, 8, 45, 235, 56
+          "http://openvpn.net/"\
+          "With extensions for interactive service and pre-started instances\n" \
+          "Copyright (C) 20016 Selva Nair <selva.nair@gmail.com>\n",
+           0, 8, 45, 235, 56
 END
 
 /* Proxy Authentication Dialog */

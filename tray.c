@@ -51,9 +51,7 @@ void
 CreatePopupMenus()
 {
     connection_t *c;
-#ifdef DEBUG
-    PrintDebug (L"In CreatePopupMenus");
-#endif
+
     for (c = o.conn; c; c = c->next)
     {
         if (!c->hMenuConn)
@@ -130,6 +128,7 @@ CreatePopupMenus()
         /* Create popup menus for every connection */
         for (c = o.conn; c; c = c->next) {
             int index = c->index;
+
             if (o.service_only[0] == '0') {
                 AppendMenu(c->hMenuConn, MF_STRING, MAKEWPARAM(IDM_CONNECTMENU,index), LoadLocalizedString(IDS_MENU_CONNECT));
                 AppendMenu(c->hMenuConn, MF_STRING, MAKEWPARAM(IDM_DISCONNECTMENU,index), LoadLocalizedString(IDS_MENU_DISCONNECT));
@@ -146,7 +145,6 @@ CreatePopupMenus()
             if (o.allow_password[0] == '1')
                 AppendMenu(c->hMenuConn, MF_STRING, MAKEWPARAM(IDM_PASSPHRASEMENU, index), LoadLocalizedString(IDS_MENU_PASSPHRASE));
 #endif
-
             SetMenuStatus(c, c->state);
         }
     }
@@ -191,9 +189,6 @@ OnNotifyTray(LPARAM lParam)
     switch (lParam) {
     case WM_RBUTTONUP:
         /* Recreate popup menus */
-#ifdef DEBUG
-        PrintDebug (L"Tray WM_RBUTTONUP");
-#endif
         DestroyPopupMenus();
         BuildFileList();
         CreatePopupMenus();
@@ -254,9 +249,6 @@ OnDestroyTray()
 void
 ShowTrayIcon()
 {
-#ifdef DEBUG
-        PrintDebug (L"ShowTrayIcon");
-#endif
   ni.cbSize = sizeof(ni);
   ni.uID = 0;
   ni.hWnd = o.hWnd;
@@ -277,9 +269,6 @@ SetTrayIcon(conn_state_t state)
     BOOL first_conn;
     UINT icon_id;
     connection_t *c, *c0;
-#ifdef DEBUG
-        PrintDebug (L"SetTrayIcon");
-#endif
 
     _tcsncpy(msg, LoadLocalizedString(IDS_TIP_DEFAULT), _countof(ni.szTip));
     _tcsncpy(msg_connected, LoadLocalizedString(IDS_TIP_CONNECTED), _countof(msg_connected));
@@ -296,9 +285,6 @@ SetTrayIcon(conn_state_t state)
             c0 = c;
         }
     }
-#ifdef DEBUG
-        PrintDebug (L"SetTrayIcon c0->index = %d", c0->index);
-#endif
 
     first_conn = TRUE;
     for (c = o.conn; c; c = c->next) {
@@ -337,9 +323,6 @@ SetTrayIcon(conn_state_t state)
     ni.uFlags = NIF_MESSAGE | NIF_TIP | NIF_ICON;
     ni.uCallbackMessage = WM_NOTIFYICONTRAY;
     _tcsncpy(ni.szTip, msg, _countof(ni.szTip));
-#ifdef DEBUG
-        PrintDebug (L"SetTrayIcon calling shell_notify");
-#endif
 
     Shell_NotifyIcon(NIM_MODIFY, &ni);
 }
@@ -356,9 +339,6 @@ CheckAndSetTrayIcon()
 
     if (CountConnState(connected) != 0)
     {
-#ifdef DEBUG
-        PrintDebug (L"CheckAndSetTrayIcon nonzero connections active");
-#endif
         SetTrayIcon(connected);
     }
     else
@@ -368,9 +348,6 @@ CheckAndSetTrayIcon()
             SetTrayIcon(connecting);
         else
             SetTrayIcon(disconnected);
-#ifdef DEBUG
-        PrintDebug (L"CheckAndSetTrayIcon no connections active");
-#endif
     }
 }
 
@@ -395,9 +372,6 @@ void
 SetMenuStatus(connection_t *c, conn_state_t state)
 {
     if (!c) return; /* BUG(): should not happen */
-#ifdef DEBUG
-        PrintDebug (L"In SetMenuStatus with c->name = %s state = %d", c->config_name, state);
-#endif
     if (o.num_configs == 1)
     {
         int index = o.conn->index;
@@ -406,6 +380,12 @@ SetMenuStatus(connection_t *c, conn_state_t state)
             EnableMenuItem(hMenu, MAKEWPARAM(IDM_CONNECTMENU ,index), MF_ENABLED);
             EnableMenuItem(hMenu, MAKEWPARAM(IDM_DISCONNECTMENU ,index), MF_GRAYED);
             EnableMenuItem(hMenu, MAKEWPARAM(IDM_STATUSMENU ,index), MF_GRAYED);
+        }
+        else if (state == onhold)
+        {
+            EnableMenuItem(hMenu, MAKEWPARAM(IDM_CONNECTMENU ,index), MF_ENABLED);
+            EnableMenuItem(hMenu, MAKEWPARAM(IDM_DISCONNECTMENU ,index), MF_GRAYED);
+            EnableMenuItem(hMenu, MAKEWPARAM(IDM_STATUSMENU ,index), MF_ENABLED);
         }
         else if (state == connecting || state == resuming || state == connected)
         {
@@ -424,6 +404,7 @@ SetMenuStatus(connection_t *c, conn_state_t state)
     {
         int i, index = c->index;
         connection_t *c1;
+
         for (c1 = o.conn, i = 0; c1; c1 = c1->next, ++i)
             if (c1 == c) break;
 
@@ -435,6 +416,12 @@ SetMenuStatus(connection_t *c, conn_state_t state)
             EnableMenuItem(c->hMenuConn, MAKEWPARAM(IDM_CONNECTMENU, index), MF_ENABLED);
             EnableMenuItem(c->hMenuConn, MAKEWPARAM(IDM_DISCONNECTMENU, index), MF_GRAYED);
             EnableMenuItem(c->hMenuConn, MAKEWPARAM(IDM_STATUSMENU, index), MF_GRAYED);
+        }
+        else if (state == onhold)
+        {
+            EnableMenuItem(c->hMenuConn, MAKEWPARAM(IDM_CONNECTMENU, index), MF_ENABLED);
+            EnableMenuItem(c->hMenuConn, MAKEWPARAM(IDM_DISCONNECTMENU, index), MF_GRAYED);
+            EnableMenuItem(c->hMenuConn, MAKEWPARAM(IDM_STATUSMENU, index), MF_ENABLED);
         }
         else if (state == connecting || state == resuming || state == connected)
         {
@@ -449,9 +436,6 @@ SetMenuStatus(connection_t *c, conn_state_t state)
             EnableMenuItem(c->hMenuConn, MAKEWPARAM(IDM_STATUSMENU, index), MF_ENABLED);
         }
     }
-#ifdef DEBUG
-        PrintDebug (L"Out SetMenuStatus with c->name = %s", c->config_name);
-#endif
 }
 
 

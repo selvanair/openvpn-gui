@@ -72,9 +72,8 @@ CheckGroupMember(DWORD count, WCHAR *grp[])
     /* Check if user's groups include any of the admin groups */
     for (i = 0; i < nread; i++)
     {
-#ifdef DEBUG
-    PrintDebug(L"user in group %d: %s", i, groups[i].lgrui0_name);
-#endif
+        PrintDebug(L"user in group %d: %s", i, groups[i].lgrui0_name);
+
         for (j = 0; j < count; j++)
         {
             if (wcscmp (groups[i].lgrui0_name, grp[j]) == 0)
@@ -86,9 +85,7 @@ CheckGroupMember(DWORD count, WCHAR *grp[])
         if (ret)
             break;
     }
-#ifdef DEBUG
     PrintDebug(L"User is %s in an authorized gtoup", ret? L"" : L"not");
-#endif
 
 out:
     if (groups)
@@ -151,9 +148,7 @@ GetBuiltinAdminGroupName (WCHAR *name, DWORD nlen)
     {
         b = LookupAccountSidW(NULL, admin_sid, name, &nlen, domain, &dlen, &su);
     }
-#ifdef DEBUG
-        PrintDebug (L"builtin admin group name = %s", name);
-#endif
+    PrintDebug (L"builtin admin group name = %s", name);
 
     free (admin_sid);
 
@@ -203,14 +198,12 @@ AddUserToGroup (const WCHAR *group)
     if (status == 0)
         retval = TRUE;
 
-#ifdef DEBUG
     if (status == (DWORD) -1)
         PrintDebug(L"RunAsAdmin: failed to execute the command [%s %s] : error = 0x%x",
                     cmd, params, GetLastError());
     else if (status)
         PrintDebug(L"RunAsAdmin: command [%s %s] returned exit_code = %lu",
                     cmd, params, status);
-#endif
 
     free (params);
     return retval;
@@ -266,10 +259,6 @@ AuthorizeConfig(const connection_t *c)
 
     /* assuming TCHAR == WCHAR as we do not support non-unicode build */
     admin_group[1] = o.ovpn_admin_group;
-
-#ifdef DEBUG
-        PrintDebug (L"admin groups: %s, %s", admin_group[0], admin_group[1]);
-#endif
 
     if (CheckConfigPath(c->config_dir, 2, admin_group))
         return TRUE;

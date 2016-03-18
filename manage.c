@@ -61,20 +61,43 @@ InitManagement(const mgmt_rtmsg_handler *handler)
 BOOL
 OpenManagement(connection_t *c)
 {
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
+    ADDRINFOW hints;
+    ADDRINFOW *addrinfo;
+    DWORD status;
+
+    CLEAR (hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    if ( (status = GetAddrInfoW (c->manage.host, c->manage.port, &hints, &addrinfo)) == 0 &&
+         addrinfo != NULL )
+    {
+        memcpy (&c->manage.addr, addrinfo->ai_addr, addrinfo->ai_addrlen);
+    }
+    else
+    {
+        PrintDebug (L"Error in getaddrinfo with host = %s port = %s err=%lu",
+                    c->manage.host, c->manage.port, status);
         return FALSE;
+    }
 
     c->manage.connected = FALSE;
-    c->manage.sk = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    c->manage.sk = socket(addrinfo->ai_family, SOCK_STREAM, IPPROTO_TCP);
+    FreeAddrInfo (addrinfo);
     if (c->manage.sk == INVALID_SOCKET)
+    {
+        PrintDebug (L"Failed open socket for \"%s\"", c->config_name);
         return FALSE;
-
+    }
     if (WSAAsyncSelect(c->manage.sk, c->hwndStatus, WM_MANAGEMENT,
         FD_CONNECT|FD_READ|FD_WRITE|FD_CLOSE) != 0)
+    {
+        PrintDebug (L"WSAAsynSelect failed with error = %lu", WSAGetLastError());
         return FALSE;
+    }
 
-    connect(c->manage.sk, (SOCKADDR *)&c->manage.skaddr, sizeof(c->manage.skaddr));
+    connect(c->manage.sk, (SOCKADDR *) &c->manage.addr, sizeof(c->manage.addr));
     c->manage.timeout = time(NULL) + max_connect_time;
 
     return TRUE;
@@ -202,19 +225,24 @@ OnManagement(SOCKET sk, LPARAM lParam)
     case FD_CONNECT:
         if (WSAGETSELECTERROR(lParam))
         {
-            if (time(NULL) < c->manage.timeout)
-                connect(c->manage.sk, (SOCKADDR *)&c->manage.skaddr, sizeof(c->manage.skaddr));
+            if (time(NULL) < c->manage.timeout || c->flags & FLAG_PRESTARTED)
+            {
+                connect(c->manage.sk, (SOCKADDR *) &c->manage.addr, sizeof(c->manage.addr));
+                PrintDebug (L"Config \"%s\" socket connect timeout. Trying again.", c->config_name);
+            }
             else
             {
                 /* Connection to MI timed out. */
                 if (c->state != disconnected)
                     c->state = timedout;
+                CloseManagement (c);
                 rtmsg_handler[stop](c, "");
             }
         }
         else
         {
             c->manage.connected = TRUE;
+            PrintDebug(L"Config \"%s\": connected to management interface", c->config_name);
         }
         break;
 
@@ -347,6 +375,17 @@ OnManagement(SOCKET sk, LPARAM lParam)
         break;
 
     case FD_CLOSE:
+        CloseManagement (c);
+        if (rtmsg_handler[stop])
+            rtmsg_handler[stop](c, "");
+        break;
+    }
+}
+void
+CloseManagement (connection_t *c)
+{
+    if (c->manage.sk != INVALID_SOCKET)
+    {
         if (c->manage.saved_size)
         {
             free(c->manage.saved_data);
@@ -358,9 +397,5 @@ OnManagement(SOCKET sk, LPARAM lParam)
         c->manage.connected = FALSE;
         while (UnqueueCommand(c))
             ;
-        WSACleanup();
-        if (rtmsg_handler[stop])
-            rtmsg_handler[stop](c, "");
-        break;
     }
 }

@@ -25,11 +25,14 @@
 #endif
 
 #include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 
 #include "main.h"
 #include "openvpn-gui-res.h"
 #include "options.h"
 #include "localization.h"
+#include "manage.h"
 
 typedef enum
 {
@@ -45,16 +48,13 @@ static struct {
    int size;
 } index_array = {NULL, 0};
 
-int
+static int
 GetFreeIndex()
 {
     int index = -1, i;
 
     if (index_array.size < o.num_configs + 1)
     {
-#ifdef DEBUG
-        PrintDebug(L"allocating index_array");
-#endif
         index_array.used = realloc(index_array.used, (index_array.size + 10)*sizeof(*index_array.used));
         if (!index_array.used)
            return index;
@@ -72,23 +72,114 @@ GetFreeIndex()
             break;
         }
     }
-#ifdef DEBUG
-    PrintDebug(L"index_array size = %d returning index = %d num_configs = %d",
-               index_array.size, index, o.num_configs);
-#endif
 
     return index;
 }
 
-void
+static void
 ReleaseIndex (int index)
 {
     if (index >= 0 && index < index_array.size)
         index_array.used[index] = FALSE;
-#ifdef DEBUG
     else
-        PrintDebug(L"ReleaseIndex: index out of bounds: %d", index);
-#endif
+        PrintDebug(L"ReleaseIndex: index out of bounds: index = %d", index);
+}
+
+static void
+ReadPassword (const WCHAR *file, char *buf, DWORD len)
+{
+    char *p;
+    FILE *fd = _wfopen (file, L"r");
+    if (fd)
+    {
+        fgets(buf, len, fd);
+        p = buf;
+        /* remove CR and LF */
+        while (*p++)
+        {
+           if (*p == '\r' || *p == '\n')
+                *p = '\0';
+        }
+        fclose (fd);
+    }
+}
+
+/* Read from config file or set defaults */
+static BOOL
+SetMgmtParams (connection_t *c)
+{
+    WCHAR path[MAX_PATH];
+    WCHAR line[1024];
+    WCHAR passfile[MAX_PATH];
+    WCHAR port[6] = L"";
+    WCHAR host[256] = L"";
+    FILE *fd;
+
+    _sntprintf_0 (path, L"%s\\%s", c->config_dir, c->config_file);
+
+    fd = _wfopen (path, L"r,ccs=UTF-8"); /* if ccs not used, do remove BOM from first line */
+
+    if (!fd)
+    {
+        PrintDebug (L"SetMgmtParams: config file open failed error = %lu", GetLastError());
+        return FALSE;
+    }
+
+    while (fgetws(line, _countof(line), fd))
+    {
+        WCHAR *p = line;
+
+        /* TODO handle quotes in parameters */
+        if (wcsncmp (p, L"management ", 11) == 0 &&
+            swscanf(p, L"management %255s %5s %255s", host, port, passfile) >= 2)
+        {
+            host[_countof(host) - 1] = '\0';
+            port[_countof(port) - 1] = '\0';
+            passfile[MAX_PATH - 1] = L'\0';
+            PrintDebug (L"SetMgmtParams: host = %s port = %s", host, port);
+        }
+        else if (wcsncmp (p, L"management ", 11) == 0)
+        {
+            PrintDebug (L"SetMgmtParams: scanf failed: host = %s port = %s", host, port);
+            *port = L'\0';
+            *host = L'\0';
+        }
+    }
+    fclose (fd);
+
+    if (*port && *host)
+    {
+        c->flags |= FLAG_PRESTARTED;
+        _sntprintf_0(c->manage.host, host);
+        _sntprintf_0(c->manage.port, port);
+    }
+    else /* use defaults */
+    {
+         _sntprintf_0(c->manage.host, L"localhost");
+         _sntprintf_0(c->manage.port, L"%d", o.mgmt_port + c->index);
+         PrintDebug (L"SetMgmtParams: host = %s port = %s", c->manage.host, c->manage.port);
+    }
+
+    if (wcslen(passfile))
+        ReadPassword (passfile, c->manage.password, _countof(c->manage.password));
+
+    return TRUE;
+}
+
+static int
+CountBySocketAddress (const WCHAR *host, const WCHAR *port)
+{
+    connection_t *c;
+    int count = 0;
+    for (c = o.conn; c; c = c->next)
+    {
+        if ( wcsncmp (host, c->manage.host, _countof(c->manage.host)) == 0 &&
+             wcsncmp (port, c->manage.port, _countof(c->manage.port)) == 0 )
+        {
+            count++;
+        }
+    }
+    return count;
 }
 
 static match_t
@@ -137,17 +228,11 @@ PurgeConnections()
 {
     connection_t **c, *found;
     DWORD i = 0;
-#ifdef DEBUG
-    PrintDebug (L"In PurgeConnections");
-#endif
     for ( c = &o.conn; *c; c = &(*c)->next)
     {
-        while (*c && (*c)->state == disconnected &&
-               !CheckReadAccess((*c)->config_dir, (*c)->config_file))
+        while (*c && (*c)->state == disconnected && CheckReadAccess ((*c)->config_dir, (*c)->config_file))
         {
-#ifdef DEBUG
-            PrintDebug (L"In PurgeConnections deleting config %s", (*c)->config_name);
-#endif
+            PrintDebug (L"PurgeConnections: deleting config %s", (*c)->config_name);
             found = *c;
             *c = found->next;
             ReleaseIndex (found->index);
@@ -156,9 +241,6 @@ PurgeConnections()
         }
         if (!*c) break;
     }
-#ifdef DEBUG
-            PrintDebug (L"In PurgeConnections purged %d configs", i);
-#endif
     return i;
 }
 
@@ -174,26 +256,20 @@ AddConfigFileToList(const TCHAR *filename, const TCHAR *config_dir)
     int i;
     connection_t *c;
 
-#ifdef DEBUG
-    PrintDebug (L"AddConfig: adding config # %d with file %s in dir %s",
-                 o.num_configs, filename, config_dir);
-#endif
     if ((c = NewConnection ()) == NULL)
     {
-#ifdef DEBUG
-        PrintDebug (L"NewConnection failed");
-#endif
-        exit (1);
+        PrintDebug (L"NewConnection() failed");
+        // TODO handle error
+        exit(1);
     }
 
     c->index = GetFreeIndex();
     if (c->index < 0) /* BUG(): should not happen  -- TODO: handle error */
     {
         free(c);
-#ifdef DEBUG
-    PrintDebug (L"BUG c->index < 0 -- abort");
-#endif
-        exit (1);
+        PrintDebug (L"BUG c->index < 0 -- abort");
+        // TODO handle error
+        exit(1);
     }
 
     _tcsncpy(c->config_file, filename, _countof(c->config_file) - 1);
@@ -203,22 +279,38 @@ AddConfigFileToList(const TCHAR *filename, const TCHAR *config_dir)
     _sntprintf_0(c->log_path, _T("%s\\%s.log"), o.log_dir, c->config_name);
 
     c->manage.sk = INVALID_SOCKET;
-    c->manage.skaddr.sin_family = AF_INET;
-    c->manage.skaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    c->manage.skaddr.sin_port = htons(c->index + 25340);
+
+    if (!SetMgmtParams(c))
+    {
+       PrintDebug (L"Could not set management interface params");
+       ReleaseIndex (c->index);
+       // TODO : implement proper delete connection
+       o.conn = c->next;
+       DeleteConnection (c);
+       return;
+    }
+    if (CountBySocketAddress(c->manage.host, c->manage.port) > 1)
+    {
+       PrintDebug (L"Multiple connections with same management address: \"%s\" -- disabling",
+                    c->config_name);
+       ReleaseIndex (c->index);
+       // TODO : implement proper delete connection
+       o.conn = c->next;
+       DeleteConnection (c);
+       return;
+    }
 
     /* Check if connection should be autostarted */
     for (i = 0; i < MAX_AUTO_CONNECT && o.auto_connect[i]; ++i)
     {
         if (_tcsicmp(c->config_file, o.auto_connect[i]) == 0)
         {
-            c->auto_connect = true;
+            c->flags |=  FLAG_AUTO_CONNECT;
             break;
         }
     }
-#ifdef DEBUG
-    PrintDebug (L"AddConfig: added config # %d with index = %d autostart = %d", o.num_configs, c->index, c->auto_connect);
-#endif
+    PrintDebug (L"AddConfig: added config \"%s\" with index = %d prestarted = %d",
+                c->config_name, c->index, c->flags & FLAG_PRESTARTED);
     o.num_configs++;
 }
 
@@ -244,9 +336,7 @@ BuildFileList0(const TCHAR *config_dir, DWORD flags)
         {
             if (ConfigAlreadyExists(find_obj.cFileName))
             {
-#ifdef DEBUG
-                PrintDebug(L"Ignoring duplicate %s in %s", find_obj.cFileName, config_dir);
-#endif
+                //PrintDebug(L"Ignoring duplicate %s in %s", find_obj.cFileName, config_dir);
                 if (flags & ISSUE_WARNINGS)
                     ShowLocalizedMsg(IDS_ERR_CONFIG_EXIST, find_obj.cFileName);
                 continue;
@@ -271,9 +361,7 @@ BuildFileList0(const TCHAR *config_dir, DWORD flags)
 
             if (find_handle1 == INVALID_HANDLE_VALUE)
             {
-#ifdef DEBUG
-                PrintDebug(L"Searching %s failed", find_string);
-#endif
+                PrintDebug(L"Searching for files in %s failed", find_string);
                 return; // TODO handle error
             }
 
@@ -285,9 +373,7 @@ BuildFileList0(const TCHAR *config_dir, DWORD flags)
                     continue;
                 if (ConfigAlreadyExists(find_obj1.cFileName))
                 {
-#ifdef DEBUG
-                    PrintDebug(L"Ignoring duplicate %s in %s", find_obj1.cFileName, subdir);
-#endif
+                    //PrintDebug(L"Ignoring duplicate %s in %s", find_obj1.cFileName, subdir);
                     if (flags & ISSUE_WARNINGS)
                         ShowLocalizedMsg(IDS_ERR_CONFIG_EXIST, find_obj1.cFileName);
                     continue;

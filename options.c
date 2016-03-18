@@ -212,6 +212,7 @@ InitOptions(options_t *opt)
 {
     CLEAR(*opt);
     opt->netcmd_semaphore = InitSemaphore ();
+    opt->mgmt_port = 25340;
 }
 
 

@@ -88,7 +88,7 @@ __sntprintf_0(TCHAR *buf, size_t size, TCHAR *format, ...)
 #define _snprintf_0(buf, ...) \
   do { \
     __snprintf_0(buf, sizeof(buf), __VA_ARGS__); \
-  } while(0);
+  } while(0)
 static inline int
 __snprintf_0(char *buf, size_t size, char *format, ...)
 {
@@ -111,6 +111,8 @@ __snprintf_0(char *buf, size_t size, char *format, ...)
         } while(0)
 
 void PrintDebugMsg(TCHAR *msg);
+#else
+#define PrintDebug(...)  do { } while(0)
 #endif
 
 DWORD GetDllVersion(LPCTSTR lpszDllName);

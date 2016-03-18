@@ -27,6 +27,8 @@
 typedef struct connection connection_t;
 
 #include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <stdio.h>
 #include <time.h>
 #include <lmcons.h>
@@ -34,6 +36,7 @@ typedef struct connection connection_t;
 #include "manage.h"
 
 #define MAX_NAME (UNLEN + 1)
+#define MAX_HOSTNAME 256
 
 /*
  * Maximum number of parameters associated with an option,
@@ -69,7 +72,8 @@ typedef enum {
     suspending,
     suspended,
     resuming,
-    timedout
+    timedout,
+    onhold
 } conn_state_t;
 
 /* Interactive Service IO parameters */
@@ -79,6 +83,8 @@ typedef struct {
     HANDLE hEvent;
     WCHAR readbuf[512];
 } service_io_t;
+#define FLAG_PRESTARTED 1
+#define FLAG_AUTO_CONNECT 2
 
 /* Connections parameters */
 struct connection {
@@ -87,7 +93,7 @@ struct connection {
     TCHAR config_dir[MAX_PATH];     /* Path to this configs dir */
     TCHAR log_path[MAX_PATH];       /* Path to Logfile */
     TCHAR ip[16];                   /* Assigned IP address for this connection */
-    BOOL auto_connect;              /* AutoConnect at startup id TRUE */
+    int flags;                      /* AutoConnect at startup, prestarted config etc..*/
     conn_state_t state;             /* State the connection currently is in */
     int failed_psw_attempts;        /* # of failed attempts entering password(s) */
     time_t connected_since;         /* Time when the connection was established */
@@ -95,7 +101,9 @@ struct connection {
 
     struct {
         SOCKET sk;
-        SOCKADDR_IN skaddr;
+        struct sockaddr_storage addr;
+        WCHAR host[MAX_HOSTNAME];
+        WCHAR port[6];
         time_t timeout;
         char password[16];
         char *saved_data;
@@ -183,6 +191,7 @@ typedef struct {
     HINSTANCE hInstance;
     BOOL session_locked;
     HANDLE netcmd_semaphore;
+    int mgmt_port;            /* port number offset for management interface */
 } options_t;
 
 void InitOptions(options_t *);

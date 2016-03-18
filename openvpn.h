@@ -24,6 +24,7 @@
 #define OPENVPN_H
 
 BOOL StartOpenVPN(connection_t *);
+BOOL ConnectOpenVPN(connection_t *);
 void StopOpenVPN(connection_t *);
 void SuspendOpenVPN(int config);
 BOOL CheckVersion();
