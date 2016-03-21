@@ -90,6 +90,7 @@ openvpn_gui_SOURCES = \
 	openvpn_config.h \
 	access.c access.h \
 	chartable.h \
+	secure_store.c secure_store.o \
 	openvpn-gui-res.h
 
 openvpn_gui_LDFLAGS = -mwindows

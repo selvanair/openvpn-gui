@@ -82,6 +82,9 @@ typedef struct {
     WCHAR readbuf[512];
 } service_io_t;
 
+#define FLAG_SAVE_KEY_PASS 0x8
+#define FLAG_SAVE_AUTH_PASS 0x12
+
 /* Connections parameters */
 struct connection {
     TCHAR config_file[MAX_PATH];    /* Name of the config file */
@@ -112,6 +115,7 @@ struct connection {
     HANDLE exit_event;
     DWORD threadId;
     HWND hwndStatus;
+    int flags;
 };
 
 /* All options used within OpenVPN GUI */

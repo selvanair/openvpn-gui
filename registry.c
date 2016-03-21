@@ -295,7 +295,6 @@ int SetRegistryValue(HKEY regkey, const TCHAR *name, const TCHAR *data)
     }
 
   return(1);
-
 }
 
 int
@@ -307,4 +306,76 @@ SetRegistryValueNumeric(HKEY regkey, const TCHAR *name, DWORD data)
 
   ShowLocalizedMsg(IDS_ERR_WRITE_REGVALUE, GUI_REGKEY_HKCU, name);
   return 0;
+}
+
+/*
+ * Open HKCU\OpenVPN-GUI\config-name (create if doesn't exist).
+ * The caller must close the key.
+ */
+static int
+OpenConfigRegistryKey(const WCHAR *config_name, HKEY *regkey)
+{
+  DWORD status;
+  DWORD dwDispos;
+
+  WCHAR name[2*MAX_PATH];
+  _sntprintf_0 (name, L"SOFTWARE\\OpenVPN-GUI\\%s", config_name);
+
+  /* create if key doesn't exist */
+  status = RegCreateKeyEx (HKEY_CURRENT_USER, name, 0, L"",
+	 REG_OPTION_NON_VOLATILE, KEY_READ | KEY_WRITE, NULL, regkey, &dwDispos);
+
+  return (status != ERROR_SUCCESS); /* return 0 on success */
+}
+
+int
+SetConfigRegistryValueBinary (const connection_t *c, const WCHAR *name, const BYTE *data, DWORD len)
+{
+  HKEY regkey;
+  DWORD status;
+
+  if(OpenConfigRegistryKey(c->config_name, &regkey))
+    return 1;
+  status = RegSetValueEx(regkey, name, 0, REG_BINARY, data, len);
+  RegCloseKey(regkey);
+
+  return (status != ERROR_SUCCESS); /* return 0 on success */
+}
+
+/*
+ * Read registry value into data which must be able to hold up to
+ * len bytes. The resulting byteblob may not be null terminated.
+ * The actual number of bytes stored in data is returned.
+ */
+DWORD
+GetConfigRegistryValue(const connection_t *c, const WCHAR *name, BYTE *data, DWORD len)
+{
+  DWORD status;
+  DWORD type;
+
+  HKEY regkey;
+
+  if(OpenConfigRegistryKey(c->config_name, &regkey))
+    return 0;
+  status = RegQueryValueEx(regkey, name, NULL, &type, data, &len);
+  RegCloseKey(regkey);
+
+  if (status != ERROR_SUCCESS)
+    return (0);
+  else
+    return (len);
+}
+
+int
+DeleteConfigRegistryValue(const connection_t *c, const WCHAR *name)
+{
+  DWORD status;
+  HKEY regkey;
+
+  if(OpenConfigRegistryKey(c->config_name, &regkey))
+    return 1;
+  status = RegDeleteValue(regkey, name);
+  RegCloseKey(regkey);
+
+  return (status != ERROR_SUCCESS); /* return 0 on success */
 }

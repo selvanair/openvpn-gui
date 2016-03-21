@@ -47,6 +47,7 @@
 #include "localization.h"
 #include "misc.h"
 #include "access.h"
+#include "secure_store.h"
 
 #define WM_OVPN_STOP    (WM_APP + 10)
 #define WM_OVPN_SUSPEND (WM_APP + 11)
@@ -200,6 +201,10 @@ OnStateChange(connection_t *c, char *data)
 
         if (c->failed_psw_attempts >= o.psw_attempts - 1)
             ManagementCommand(c, "auth-retry none", NULL, regular);
+        if (strcmp(message, "auth-failure") == 0)
+            clear_user_pass (c);
+        else if (strcmp(message, "pprivate-key-password-failure") == 0)
+            clear_passphrase(c);
 
         c->state = reconnecting;
         CheckAndSetTrayIcon();
@@ -217,6 +222,7 @@ INT_PTR CALLBACK
 UserAuthDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     auth_param_t *param;
+    user_pass_t ua;
 
     switch (msg)
     {
@@ -238,6 +244,11 @@ UserAuthDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             if(param->challenge_echo)
                 SendMessage(wnd_challenge, EM_SETPASSWORDCHAR, 0, 0);
         }
+        if (recall_user_pass (param->c, &ua) == 0)
+        {
+            SetDlgItemTextW(hwndDlg, ID_EDT_AUTH_USER, ua.username);
+            SetDlgItemTextW(hwndDlg, ID_EDT_AUTH_PASS, ua.password);
+        }
         if (param->c->state == resuming)
             ForceForegroundWindow(hwndDlg);
         else
@@ -257,6 +268,12 @@ UserAuthDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             break;
 
         case IDOK:
+            if (GetDlgItemTextW(hwndDlg, ID_EDT_AUTH_USER, ua.username, _countof(ua.username)) &&
+                GetDlgItemTextW(hwndDlg, ID_EDT_AUTH_PASS, ua.password, _countof(ua.password)))
+            {
+                store_user_pass (param->c, &ua, param->c->flags & FLAG_SAVE_AUTH_PASS);
+            }
+            CLEAR(ua);
             ManagementCommandFromInput(param->c, "username \"Auth\" \"%s\"", hwndDlg, ID_EDT_AUTH_USER);
             if (param->challenge_str)
                 ManagementCommandFromInputBase64(param->c, "password \"Auth\" \"SCRV1:%s:%s\"", hwndDlg, ID_EDT_AUTH_PASS, ID_EDT_AUTH_CHALLENGE);
@@ -312,7 +329,14 @@ PrivKeyPassDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         c = (connection_t *) GetProp(hwndDlg, cfgProp);
         switch (LOWORD(wParam))
         {
+            WCHAR passphrase[USER_PASS_LEN];
         case IDOK:
+            if (c->flags & FLAG_SAVE_KEY_PASS &&
+                GetDlgItemTextW(hwndDlg, ID_EDT_PASSPHRASE, passphrase, _countof(passphrase)))
+            {
+                store_passphrase (c, passphrase);
+                memset (passphrase, 0, sizeof(passphrase));
+            }
             ManagementCommandFromInput(c, "password \"Private Key\" \"%s\"", hwndDlg, ID_EDT_PASSPHRASE);
             EndDialog(hwndDlg, LOWORD(wParam));
             return TRUE;
@@ -660,7 +684,7 @@ OnService(connection_t *c, UNUSED char *msg)
         free (buf);
         return;
     }
- 
+
     p = buf + 11;
     while (iswspace(*p)) ++p;
 

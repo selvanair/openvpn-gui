@@ -35,6 +35,7 @@
 #include "openvpn-gui-res.h"
 #include "options.h"
 #include "localization.h"
+#include "secure_store.h"
 
 extern options_t o;
 
@@ -46,6 +47,7 @@ RunPreconnectScript(connection_t *c)
     PROCESS_INFORMATION pi;
     TCHAR cmdline[256];
     DWORD exit_code;
+    DWORD cr_flags = CREATE_UNICODE_ENVIRONMENT;
     struct _stat st;
     int i;
 
@@ -68,9 +70,13 @@ RunPreconnectScript(connection_t *c)
     si.hStdInput = NULL;
     si.hStdOutput = NULL;
 
+    if (o.show_script_window[0] == '1')
+       cr_flags |= CREATE_NEW_CONSOLE;
+    else
+       cr_flags |= CREATE_NO_WINDOW;
+
     if (!CreateProcess(NULL, cmdline, NULL, NULL, TRUE,
-                       (o.show_script_window[0] == '1' ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW),
-                       NULL, c->config_dir, &si, &pi))
+                       cr_flags, NULL, c->config_dir, &si, &pi))
         return;
 
     for (i = 0; i <= o.preconnectscript_timeout; i++)
@@ -98,6 +104,10 @@ RunConnectScript(connection_t *c, int run_as_service)
     DWORD exit_code;
     struct _stat st;
     int i;
+    DWORD cr_flags = CREATE_UNICODE_ENVIRONMENT;
+    user_pass_t ua;
+
+    CLEAR(ua);
 
     /* Cut off extention from config filename and add "_up.bat" */
     int len = _tcslen(c->config_file) - _tcslen(o.ext_string) - 1;
@@ -110,6 +120,14 @@ RunConnectScript(connection_t *c, int run_as_service)
     if (!run_as_service)
         SetDlgItemText(c->hwndStatus, ID_TXT_STATUS, LoadLocalizedString(IDS_NFO_STATE_CONN_SCRIPT));
 
+    if (recall_user_pass (c, &ua) == 0)
+    {
+        if (*ua.username)
+            SetEnvironmentVariableW (L"username", ua.username);
+        if (*ua.password)
+            SetEnvironmentVariableW (L"password", ua.username);
+    }
+
     CLEAR(si);
     CLEAR(pi);
 
@@ -121,13 +139,21 @@ RunConnectScript(connection_t *c, int run_as_service)
     si.hStdInput = NULL;
     si.hStdOutput = NULL;
 
+    if (o.show_script_window[0] == '1')
+       cr_flags |= CREATE_NEW_CONSOLE;
+    else
+       cr_flags |= CREATE_NO_WINDOW;
+
     if (!CreateProcess(NULL, cmdline, NULL, NULL, TRUE,
-                       (o.show_script_window[0] == '1' ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW),
+                       cr_flags,
                        NULL, c->config_dir, &si, &pi))
     {
         ShowLocalizedMsg(IDS_ERR_RUN_CONN_SCRIPT, cmdline);
         return;
     }
+
+    SetEnvironmentVariableW(L"username", NULL);
+    SetEnvironmentVariableW(L"password", NULL);
 
     if (o.connectscript_timeout == 0)
         goto out;
@@ -167,6 +193,7 @@ RunDisconnectScript(connection_t *c, int run_as_service)
     DWORD exit_code;
     struct _stat st;
     int i;
+    DWORD cr_flags = CREATE_UNICODE_ENVIRONMENT;
 
     /* Cut off extention from config filename and add "_down.bat" */
     int len = _tcslen(c->config_file) - _tcslen(o.ext_string) - 1;
@@ -190,8 +217,13 @@ RunDisconnectScript(connection_t *c, int run_as_service)
     si.hStdInput = NULL;
     si.hStdOutput = NULL;
 
+    if (o.show_script_window[0] == '1')
+       cr_flags |= CREATE_NEW_CONSOLE;
+    else
+       cr_flags |= CREATE_NO_WINDOW;
+
     if (!CreateProcess(NULL, cmdline, NULL, NULL, TRUE,
-                       (o.show_script_window[0] == '1' ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW),
+                       cr_flags,
                        NULL, c->config_dir, &si, &pi))
         return;
 
