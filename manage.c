@@ -212,7 +212,10 @@ OnManagement(SOCKET sk, LPARAM lParam)
                 rtmsg_handler[stop](c, "");
             }
         }
-        c->manage.connected = TRUE;
+        else
+        {
+            c->manage.connected = TRUE;
+        }
         break;
 
     case FD_READ:
