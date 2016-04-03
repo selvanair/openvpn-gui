@@ -52,8 +52,13 @@
 #define true 1
 #define false 0
 
-/* GCC function attributes */
+/* GCC function attributes => add ifdef, to work with GCC / MinGW, and MSVC */
+#ifdef __GNUC__
 #define UNUSED __attribute__ ((unused))
+#else
+#define UNUSED
+#endif
+
 #define NORETURN __attribute__ ((noreturn))
 
 #define PACKVERSION(major,minor) MAKELONG(minor,major)
