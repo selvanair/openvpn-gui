@@ -20,9 +20,10 @@
  *  59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
+#elif defined(_MSC_VER)
+#include "config-msvc.h"
 #endif
 
 #include <windows.h>
