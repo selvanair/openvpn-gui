@@ -32,7 +32,7 @@ typedef enum {
     bytecount,
     echo,
     hold,
-    log,
+    logline,
     password,
     proxy,
     state,

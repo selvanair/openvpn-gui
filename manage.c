@@ -312,8 +312,8 @@ OnManagement(SOCKET sk, LPARAM lParam)
                 pos = line + 1;
                 if (strncmp(pos, "LOG:", 4) == 0)
                 {
-                    if (rtmsg_handler[log])
-                        rtmsg_handler[log](c, pos + 4);
+                    if (rtmsg_handler[logline])
+                        rtmsg_handler[logline](c, pos + 4);
                 }
                 else if (strncmp(pos, "STATE:", 6) == 0)
                 {

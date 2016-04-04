@@ -33,7 +33,7 @@
 #include <shlwapi.h>
 #include <wtsapi32.h>
 #include <prsht.h>
-#include <pbt.h>
+//#include <pbt.h>
 #include <commdlg.h>
 
 #include "tray.h"
@@ -113,7 +113,7 @@ int WINAPI _tWinMain (HINSTANCE hThisInstance,
   mgmt_rtmsg_handler handler[] = {
       { ready,    OnReady },
       { hold,     OnHold },
-      { log,      OnLogLine },
+      { logline,  OnLogLine },
       { state,    OnStateChange },
       { password, OnPassword },
       { proxy,    OnProxy },
