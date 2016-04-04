@@ -430,7 +430,7 @@ OnPassword(connection_t *c, char *msg)
         if (chstr)
         {
             param->challenge_echo = *(chstr + 3) != '0';
-            param->challenge_str = strdup(chstr + 5);
+            param->challenge_str = _strdup(chstr + 5);
             LocalizedDialogBoxParam(ID_DLG_AUTH_CHALLENGE, UserAuthDialogFunc, (LPARAM) param);
         }
         else
@@ -671,7 +671,7 @@ HandleServiceIO (DWORD err, DWORD bytes, LPOVERLAPPED lpo)
     }
 
     /* queue next read request */
-    ReadFileEx (s->pipe, s->readbuf, capacity, lpo, HandleServiceIO);
+    ReadFileEx (s->pipe, s->readbuf, capacity, lpo, (LPOVERLAPPED_COMPLETION_ROUTINE)HandleServiceIO);
     /* Any error in the above call will get checked in next round */
 }
 
@@ -719,7 +719,7 @@ OnService(connection_t *c, UNUSED char *msg)
     const WCHAR *prefix = L"IService> ";
 
     len = wcslen (c->iserv.readbuf);
-    if (!len || (buf = wcsdup (c->iserv.readbuf)) == NULL)
+    if (!len || (buf = _wcsdup (c->iserv.readbuf)) == NULL)
         return;
 
     /* messages from the service are in the format "0x08x\n%s\n%s" */
