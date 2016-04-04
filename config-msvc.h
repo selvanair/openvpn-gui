@@ -25,8 +25,8 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
 
-/* Maximum number of config files supported. */
-#define MAX_CONFIGS 50
+/* Maximum number of auto connect config files supported. */
+#define MAX_AUTO_CONNECT 50
 
 /* Name of package */
 #define PACKAGE "openvpn-gui"
@@ -38,7 +38,7 @@
 #define PACKAGE_NAME "OpenVPN GUI"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "OpenVPN GUI 10"
+#define PACKAGE_STRING "OpenVPN GUI 11"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "openvpn-gui"
@@ -47,10 +47,10 @@
 #define PACKAGE_URL "https://github.com/openvpn/openvpn-gui/"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "10"
+#define PACKAGE_VERSION "11"
 
 /* Version in windows resource format */
-#define PACKAGE_VERSION_RESOURCE 10,0,0,0
+#define PACKAGE_VERSION_RESOURCE 11,0,0,0
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
@@ -78,7 +78,7 @@
 
 
 /* Version number of package */
-#define VERSION "10"
+#define VERSION "11"
 
 /* Define to 1 if on MINIX. */
 /* #undef _MINIX */
