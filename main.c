@@ -59,7 +59,6 @@
 LRESULT CALLBACK WindowProcedure (HWND, UINT, WPARAM, LPARAM);
 static void ShowSettingsDialog();
 void CloseApplication(HWND hwnd);
-void ImportConfigFile();
 
 /*  Class name and window title  */
 TCHAR szClassName[ ] = _T("OpenVPN-GUI");
@@ -106,6 +105,7 @@ int WINAPI _tWinMain (HINSTANCE hThisInstance,
   MSG messages;            /* Here messages to the application are saved */
   WNDCLASSEX wincl;        /* Data structure for the windowclass */
   DWORD shell32_version;
+  BOOL already_running = 0;
 
   /* Initialize handlers for manangement interface notifications */
   mgmt_rtmsg_handler handler[] = {
@@ -162,22 +162,28 @@ int WINAPI _tWinMain (HINSTANCE hThisInstance,
   PrintDebug(_T("Shell32.dll version: 0x%lx"), shell32_version);
 #endif
 
-
   /* Check if a previous instance is already running. */
   if ((FindWindow (szClassName, NULL)) != NULL)
     {
         /* GUI already running */
-        ShowLocalizedMsg(IDS_ERR_GUI_ALREADY_RUNNING);
-        exit(1);
+        already_running = 1;
+    }
+  else
+    {
+        UpdateRegistry(); /* Checks version change and update keys/values */
     }
 
-  UpdateRegistry(); /* Checks version change and update keys/values */
-
   GetRegistryKeys();
+
+  EnsureDirExists(o.config_dir);
   /* Parse command-line options */
   ProcessCommandLine(&o, GetCommandLine());
 
-  EnsureDirExists(o.config_dir);
+  if (already_running)
+    {
+        ShowLocalizedMsg(IDS_ERR_GUI_ALREADY_RUNNING);
+        exit(1);
+    }
 
   if (!CheckVersion()) {
     exit(1);
@@ -397,7 +403,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
         ViewLog(LOWORD(wParam) - IDM_VIEWLOGMENU);
       }
       if ( (LOWORD(wParam) >= IDM_EDITMENU) && (LOWORD(wParam) < IDM_EDITMENU + MAX_CONFIGS) ) {
-        EditConfig(LOWORD(wParam) - IDM_EDITMENU);
+        EditConfig(LOWORD(wParam) - IDM_EDITMENU, NULL);
       }
       if ( (LOWORD(wParam) >= IDM_CLEARPASSMENU) && (LOWORD(wParam) < IDM_CLEARPASSMENU + MAX_CONFIGS) ) {
         DisablePasswordSave(&o.conn[LOWORD(wParam) - IDM_CLEARPASSMENU]);
@@ -408,7 +414,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
       }
 #endif
       if (LOWORD(wParam) == IDM_IMPORT) {
-        ImportConfigFile();
+        ImportConfigFile(NULL);
       }
       if (LOWORD(wParam) == IDM_SETTINGS) {
         ShowSettingsDialog();
@@ -572,40 +578,64 @@ CloseApplication(HWND hwnd)
 }
 
 void
-ImportConfigFile()
+ShowConfigFileDialog(PTCHAR config_file)
 {
-    
-    TCHAR filter[2*_countof(o.ext_string)+5];
+    PTCHAR fileName;
+    int dlgresult = 0;
 
-    _sntprintf_0(filter, _T("*.%s%c*.%s%c"), o.ext_string, _T('\0'), o.ext_string, _T('\0'));
-    
-    OPENFILENAME fn;
+    fileName = PathFindFileName(config_file);
+    dlgresult = ShowLocalizedMsgEx(MB_YESNO, _T(PACKAGE_NAME), IDS_ASK_IMPORT_OR_EDIT, fileName);
+    if (dlgresult == IDYES)
+        ImportConfigFile(config_file);
+    else
+        EditConfig(0, config_file);
+}
+
+
+void
+ImportConfigFile(PTCHAR config_file)
+{
     TCHAR source[MAX_PATH] = _T("");
+    PTCHAR fileName;
+    BOOL result = 1;
 
-    fn.lStructSize = sizeof(OPENFILENAME);
-    fn.hwndOwner = NULL;
-    fn.lpstrFilter = filter;
-    fn.lpstrCustomFilter = NULL;
-    fn.nFilterIndex = 1;
-    fn.lpstrFile = source;
-    fn.nMaxFile = MAX_PATH;
-    fn.lpstrFileTitle = NULL;
-    fn.lpstrInitialDir = NULL;
-    fn.lpstrTitle = NULL;
-    fn.Flags = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
-    fn.lpstrDefExt = NULL;
-
-    if (GetOpenFileName(&fn)) 
+    if (config_file == NULL)
     {
+        OPENFILENAME fn;
+        TCHAR filter[2*_countof(o.ext_string)+5];
 
+        _sntprintf_0(filter, _T("*.%s%c*.%s%c"), o.ext_string, _T('\0'), o.ext_string, _T('\0'));
+
+        fn.lStructSize = sizeof(OPENFILENAME);
+        fn.hwndOwner = NULL;
+        fn.lpstrFilter = filter;
+        fn.lpstrCustomFilter = NULL;
+        fn.nFilterIndex = 1;
+        fn.lpstrFile = source;
+        fn.nMaxFile = MAX_PATH;
+        fn.lpstrFileTitle = NULL;
+        fn.lpstrInitialDir = NULL;
+        fn.lpstrTitle = NULL;
+        fn.Flags = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
+        fn.lpstrDefExt = NULL;
+
+        result = GetOpenFileName(&fn) && (fileName = source + fn.nFileOffset);
+    }
+    else
+    {
+        fileName = PathFindFileName(config_file);
+        _tcscpy(source, config_file);
+    }
+
+    if (result)
+    {
         TCHAR destination[MAX_PATH];
-        PTCHAR fileName = source + fn.nFileOffset;
 
         _sntprintf_0(destination, _T("%s\\%s"), o.config_dir, fileName);
 
         destination[_tcslen(destination) - _tcslen(o.ext_string) - 1] = _T('\0');
         
-        if (EnsureDirExists(destination))
+        if (EnsureDirExists(destination) && EnsureDirExists(o.config_dir))
         {
 
             _sntprintf_0(destination, _T("%s\\%s"), destination, fileName);
@@ -614,7 +644,7 @@ ImportConfigFile()
             {
                 if (GetLastError() == ERROR_FILE_EXISTS)
                 {
-                    fileName[_tcslen(fileName) - _tcslen(o.ext_string) - 1] = _T('\0');
+                    PathRemoveExtension(fileName);
                     ShowLocalizedMsg(IDS_ERR_IMPORT_EXISTS, fileName);
                     return;
                 }
