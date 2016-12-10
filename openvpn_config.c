@@ -34,6 +34,8 @@
 #include "save_pass.h"
 #include "misc.h"
 #include "passphrase.h"
+#include "openvpn_config.h"
+#include "config_parser.h"
 
 typedef enum
 {
@@ -87,12 +89,50 @@ ConfigAlreadyExists(TCHAR *newconfig)
     return false;
 }
 
+static void
+DisableSavePasswords(connection_t *c)
+{
+    DeleteSavedPasswords(c->config_name);
+    c->flags &= ~(FLAG_SAVE_AUTH_PASS | FLAG_SAVE_KEY_PASS);
+    c->flags |= FLAG_DISABLE_SAVE_PASS;
+}
+
+static void
+ParseConfig(connection_t *c)
+{
+    config_parser_t *cp;
+    wchar_t *s;
+
+    if (!c->config_file
+        || !(cp = OpenConfig(c->config_file)))
+    {
+        PrintDebug(L"Failed to parse config file '%s'", c->config_file);
+        return;
+    }
+
+    while ( (s = ConfigReadline (cp)) != NULL)
+    {
+        if (ConfigNumTokens(cp) > 0
+            && (wcscmp(ConfigGetToken(cp, 0), L"auth-nocache") == 0
+                || wcscmp(ConfigGetToken(cp, 0), L"--auth-nocache") == 0))
+        {
+            DisableSavePasswords(c);
+            PrintDebug(L"Disabling password save feature due to --auth-nocache in config");
+            break; /* currently we only check auth-nocahe specified or not */
+        }
+    }
+    CloseConfig(cp);
+
+    return;
+}
 
 static void
 AddConfigFileToList(int config, const TCHAR *filename, const TCHAR *config_dir)
 {
     connection_t *c = &o.conn[config];
     int i;
+
+    memset(c, 0, sizeof(*c));
 
     _tcsncpy(c->config_file, filename, _countof(c->config_file) - 1);
     _tcsncpy(c->config_dir, config_dir, _countof(c->config_dir) - 1);
@@ -109,6 +149,9 @@ AddConfigFileToList(int config, const TCHAR *filename, const TCHAR *config_dir)
     if (CheckKeyFileWriteAccess (c))
         c->flags |= FLAG_ALLOW_CHANGE_PASSPHRASE;
 #endif
+
+    /* parse config for any options that need special handling */
+    ParseConfig(c);
 
     /* Check if connection should be autostarted */
     for (i = 0; i < MAX_CONFIGS && o.auto_connect[i]; ++i)
