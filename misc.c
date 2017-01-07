@@ -391,7 +391,6 @@ BOOL IsUserAdmin(VOID)
             b = FALSE;
         FreeSid(AdministratorsGroup);
     }
-
     return(b);
 }
 
