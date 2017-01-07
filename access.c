@@ -32,6 +32,7 @@
 #include <lm.h>
 #include <stdlib.h>
 #include <security.h>
+#include <sddl.h>
 #include "main.h"
 #include "options.h"
 #include "service.h"
@@ -41,61 +42,8 @@
 extern options_t o;
 
 #define MAX_UNAME_LEN (UNLEN + DNLEN + 2) /* UNLEN, DNLEN from lmcons.h +2 for '\' and NULL */
-
-/*
- * Check whether current user is a member of specified groups
- */
-static BOOL
-CheckGroupMember(DWORD count, WCHAR *grp[])
-{
-    LOCALGROUP_USERS_INFO_0 *groups = NULL;
-    DWORD nread, nmax, err;
-    WCHAR username[MAX_UNAME_LEN];
-    DWORD size;
-    DWORD i, j;
-    BOOL ret = FALSE;
-
-    size = _countof (username);
-    /* get username in domain\user format */
-    if (!GetUserNameExW (NameSamCompatible, username, &size))
-        return FALSE;
-#ifdef DEBUG
-    PrintDebug(L"Username: \"%s\"", username);
-#endif
-
-    /* Get an array of groups the user is member of */
-    err = NetUserGetLocalGroups (NULL, username, 0, LG_INCLUDE_INDIRECT,
-                    (LPBYTE *) &groups, MAX_PREFERRED_LENGTH, &nread, &nmax);
-    if (err && err != ERROR_MORE_DATA)
-        goto out;
-
-    /* Check if user's groups include any of the admin groups */
-    for (i = 0; i < nread; i++)
-    {
-#ifdef DEBUG
-    PrintDebug(L"user in group %d: %s", i, groups[i].lgrui0_name);
-#endif
-        for (j = 0; j < count; j++)
-        {
-            if (wcscmp (groups[i].lgrui0_name, grp[j]) == 0)
-            {
-                ret = TRUE;
-                break;
-            }
-        }
-        if (ret)
-            break;
-    }
-#ifdef DEBUG
-    PrintDebug(L"User is%s in an authorized group", ret? L"" : L" not");
-#endif
-
-out:
-    if (groups)
-        NetApiBufferFree (groups);
-
-    return ret;
-}
+static BOOL GetOwnerSid(PSID sid, DWORD sid_size);
+static BOOL IsUserInGroup(PSID sid, const WCHAR *group_name);
 
 /*
  * Run a command as admin using shell execute and return the exit code.
@@ -159,6 +107,7 @@ GetBuiltinAdminGroupName (WCHAR *name, DWORD nlen)
 
     return b;
 }
+
 /*
  * Add current user to the specified group. Uses RunAsAdmin to elevate.
  * Reject if the group name contains certain illegal characters.
@@ -237,7 +186,7 @@ AddUserToGroup (const WCHAR *group)
  * or the config_dir be inside the global_config_dir
  */
 static BOOL
-CheckConfigPath (const WCHAR *config_dir, DWORD ngrp, WCHAR *admin_group[])
+CheckConfigPath (const WCHAR *config_dir)
 {
     BOOL ret = FALSE;
     int size = wcslen(o.global_config_dir);
@@ -251,13 +200,6 @@ CheckConfigPath (const WCHAR *config_dir, DWORD ngrp, WCHAR *admin_group[])
               wcsstr(config_dir + size, L"..") == NULL
             )
         ret = TRUE;
-
-    /* check user is in an authorized group */
-    else
-    {
-        if (CheckGroupMember(ngrp, admin_group))
-            ret = TRUE;
-    }
 
     return ret;
 }
@@ -273,6 +215,9 @@ AuthorizeConfig(const connection_t *c)
     BOOL retval = FALSE;
     WCHAR *admin_group[2];
     WCHAR sysadmin_group[MAX_NAME];
+    BYTE sid_buf[SECURITY_MAX_SID_SIZE];
+    PSID sid = (PSID) sid_buf;
+    DWORD sid_size = SECURITY_MAX_SID_SIZE;
 
     if (GetBuiltinAdminGroupName(sysadmin_group, _countof(sysadmin_group)))
         admin_group[0] = sysadmin_group;
@@ -282,18 +227,31 @@ AuthorizeConfig(const connection_t *c)
     /* assuming TCHAR == WCHAR as we do not support non-unicode build */
     admin_group[1] = o.ovpn_admin_group;
 
-#ifdef DEBUG
-        PrintDebug (L"admin groups: %s, %s", admin_group[0], admin_group[1]);
-#endif
+    PrintDebug(L"Authorized groups: '%s', '%s'", admin_group[0], admin_group[1]);
 
-    if (CheckConfigPath(c->config_dir, 2, admin_group))
+
+    if (CheckConfigPath(c->config_dir))
         return TRUE;
+
+    if (!GetOwnerSid(sid, sid_size))
+    {
+        /* This should not happen */
+        if (!o.silent_connection)
+            MessageBoxW(NULL, L"Failed to determine process owner SID", L""PACKAGE_NAME, MB_OK);
+        return FALSE;
+    }
+
+    if (IsUserInGroup(sid, admin_group[0])
+        || IsUserInGroup(sid, admin_group[1]))
+    {
+        return TRUE;
+    }
     /* do not attempt to add user to sysadmin_group or a no-name group */
-    else if ( wcscmp(sysadmin_group, o.ovpn_admin_group) == 0 ||
+    else if ( wcscmp(admin_group[0], o.ovpn_admin_group) == 0 ||
               wcslen(o.ovpn_admin_group) == 0                 ||
               !o.netcmd_semaphore )
     {
-        ShowLocalizedMsg(IDS_ERR_CONFIG_NOT_AUTHORIZED, c->config_name, sysadmin_group);
+        ShowLocalizedMsg(IDS_ERR_CONFIG_NOT_AUTHORIZED, c->config_name, admin_group[0]);
         return FALSE;
     }
 
@@ -313,9 +271,9 @@ AuthorizeConfig(const connection_t *c)
     {
         AddUserToGroup (o.ovpn_admin_group);
         /*
-         * Check the success of above by testing the config path again.
+         * Check the success of above by testing the group membership again
          */
-        if (CheckConfigPath(c->config_dir, 2, admin_group))
+        if (IsUserInGroup(sid, o.ovpn_admin_group))
             retval = TRUE;
         else
             ShowLocalizedMsg(IDS_ERR_ADD_USER_TO_ADMIN_GROUP, o.ovpn_admin_group);
@@ -324,4 +282,107 @@ AuthorizeConfig(const connection_t *c)
     ReleaseSemaphore (o.netcmd_semaphore, 1, NULL);
 
     return retval;
+}
+
+/**
+ * Check a user with specified sid is in a local group named group_name
+ *
+ * Using sid instead of username avoids reference to domains so that
+ * this could be completed without access to the Domain Controller.
+ *
+ * Returns true if the user is in the group, false otherwise.
+ */
+static BOOL
+IsUserInGroup(PSID sid, const WCHAR *group_name)
+{
+    DWORD_PTR resume = 0;
+    LOCALGROUP_MEMBERS_INFO_0 *groups;
+    DWORD err, nread, nmax;
+    BOOL ret = FALSE;
+    int nloop = 0; /* a counter user to not get stuck in the do .. while() */
+
+#if 1
+    WCHAR *usersid = NULL;
+    if (ConvertSidToStringSidW(sid, &usersid))
+        PrintDebug(L"Checking membership of user with sid '%s' in group '%s'", usersid, group_name);
+    LocalFree(usersid);
+#endif
+
+    do
+    {
+        groups = NULL;
+        err = NetLocalGroupGetMembers(NULL, group_name, 0, (LPBYTE *) &groups,
+                                      MAX_PREFERRED_LENGTH, &nread, &nmax, &resume);
+        if (err && err != ERROR_MORE_DATA)
+        {
+            break;
+        }
+
+        /* If a match is already found, ret = TRUE, the loop is skipped */
+        for (DWORD i = 0; i < nread && !ret; ++i)
+        {
+            ret = EqualSid(groups[i].lgrmi0_sid, sid);
+#if 1
+            WCHAR *strsid = NULL;
+            ConvertSidToStringSidW(groups[i].lgrmi0_sid, &strsid);
+            PrintDebug(L"Group '%s' has member with sid '%s'", group_name, strsid);
+            LocalFree(strsid);
+#endif
+        }
+
+        NetApiBufferFree(groups);
+
+    /* MSDN says the lookup should always iterate until err != ERROR_MORE_DATA */
+    } while (err == ERROR_MORE_DATA && nloop++ < 100);
+
+    if (err != NERR_Success && err != NERR_GroupNotFound)
+    {
+        PrintDebug(L"NetLocalGroupGetMembers for group '%s' failed: error = %lu", group_name, err);
+    }
+    if (ret)
+        PrintDebug(L"User is in group '%s'", group_name);
+
+    return ret;
+}
+
+/**
+ * Get SID of the current process owner
+ * On input sid must have space for at least sid_size bytes
+ *
+ * On success return true, else return false.
+ */
+static BOOL
+GetOwnerSid(PSID sid, DWORD sid_size)
+{
+    BOOL ret = FALSE;
+    HANDLE token;
+    DWORD buf_size = 0;
+    TOKEN_USER *tu = NULL;
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
+    {
+        PrintDebug(L"Failed to get current process token: error = %lu", GetLastError());
+        goto out;
+    }
+
+    GetTokenInformation(token, TokenUser, NULL, 0, &buf_size);
+    PrintDebug(L"Needed buffer size for Token User = %lu", buf_size);
+
+    tu = malloc(buf_size);
+    if (!tu || !GetTokenInformation(token, TokenUser, tu, buf_size, &buf_size))
+    {
+        PrintDebug(L"Failed to get Token User Information: error = %lu", GetLastError);
+        goto out;
+    }
+
+    if (!CopySid(sid_size, sid, tu->User.Sid))
+    {
+        PrintDebug(L"CopySid Failed: error = %lu", GetLastError());
+        goto out;
+    }
+    ret = TRUE;
+
+out:
+    free(tu);
+    return ret;
 }
