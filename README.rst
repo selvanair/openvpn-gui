@@ -129,7 +129,7 @@ Parameters taken from the global registry values in
 *HKEY_LOCAL_MACHINE\\SOFTWARE\\OpenVPN\\* key
 
 (Default)
-    The installation directory of opebvpn (e.g., *C:\\Program Files\\OpenVPN*).
+    The installation directory of openvpn (e.g., *C:\\Program Files\\OpenVPN*).
     This value must be present.
 
 config_dir
