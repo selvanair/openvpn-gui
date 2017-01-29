@@ -58,7 +58,7 @@
 /*  Declare Windows procedure  */
 LRESULT CALLBACK WindowProcedure (HWND, UINT, WPARAM, LPARAM);
 static void ShowSettingsDialog();
-void CloseApplication(HWND hwnd);
+void CloseApplication(HWND hwnd, BOOL silent);
 void ImportConfigFile();
 
 /*  Class name and window title  */
@@ -418,7 +418,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
         ShowSettingsDialog();
       }
       if (LOWORD(wParam) == IDM_CLOSE) {
-        CloseApplication(hwnd);
+        CloseApplication(hwnd, o.silent_connection);
       }
       if (LOWORD(wParam) == IDM_SERVICE_START) {
         MyStartService();
@@ -430,7 +430,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
       break;
 	    
     case WM_CLOSE:
-      CloseApplication(hwnd);
+      CloseApplication(hwnd, TRUE);
       break;
 
     case WM_DESTROY:
@@ -554,11 +554,11 @@ ShowSettingsDialog()
 
 
 void
-CloseApplication(HWND hwnd)
+CloseApplication(HWND hwnd, BOOL silent)
 {
     int i;
 
-    if (o.service_state == service_connected
+    if (o.service_state == service_connected && !silent
     && ShowLocalizedMsgEx(MB_YESNO, _T("Exit OpenVPN"), IDS_NFO_SERVICE_ACTIVE_EXIT) == IDNO)
             return;
 
@@ -568,7 +568,8 @@ CloseApplication(HWND hwnd)
             continue;
 
         /* Ask for confirmation if still connected */
-        if (ShowLocalizedMsgEx(MB_YESNO, _T("Exit OpenVPN"), IDS_NFO_ACTIVE_CONN_EXIT) == IDNO)
+        if (!silent
+            && ShowLocalizedMsgEx(MB_YESNO, _T("Exit OpenVPN"), IDS_NFO_ACTIVE_CONN_EXIT) == IDNO)
             return;
     }
 

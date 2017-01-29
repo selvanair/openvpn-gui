@@ -855,9 +855,9 @@ OnStop(connection_t *c, UNUSED char *msg)
         {
             SetForegroundWindow(c->hwndStatus);
             ShowWindow(c->hwndStatus, SW_SHOW);
-        }
-        MessageBox(c->hwndStatus, LoadLocalizedString(IDS_NFO_CONN_TERMINATED, c->config_file),
+            MessageBox(c->hwndStatus, LoadLocalizedString(IDS_NFO_CONN_TERMINATED, c->config_file),
                    _T(PACKAGE_NAME), MB_OK);
+        }
         SendMessage(c->hwndStatus, WM_CLOSE, 0, 0);
         break;
 
@@ -883,8 +883,8 @@ OnStop(connection_t *c, UNUSED char *msg)
         {
             SetForegroundWindow(c->hwndStatus);
             ShowWindow(c->hwndStatus, SW_SHOW);
+            MessageBox(c->hwndStatus, LoadLocalizedString(msg_id, msg_xtra), _T(PACKAGE_NAME), MB_OK);
         }
-        MessageBox(c->hwndStatus, LoadLocalizedString(msg_id, msg_xtra), _T(PACKAGE_NAME), MB_OK);
         SendMessage(c->hwndStatus, WM_CLOSE, 0, 0);
         break;
 
