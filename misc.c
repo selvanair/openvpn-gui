@@ -349,6 +349,12 @@ streq(LPCSTR str1, LPCSTR str2)
 }
 
 BOOL
+strbegins(const char *str, const char *begin)
+{
+    return (strncmp(str, begin, strlen(begin)) == 0);
+}
+
+BOOL
 wcsbegins(LPCWSTR str, LPCWSTR begin)
 {
     return (wcsncmp(str, begin, wcslen(begin)) == 0);
@@ -452,4 +458,110 @@ Widen(const char *utf8)
     }
 
     return wstr;
+}
+
+/* To match with openvpn we accept only :ALPHA:, :DIGIT: or '_' in names */
+BOOL
+is_valid_env_name(const char *name)
+{
+    if (strlen(name) == 0)
+    {
+        PrintDebug(L"Empty env var name rejected");
+        return false;
+    }
+    while (*name)
+    {
+        const char c = *name;
+        if (!isalnum(c) && c != '_')
+        {
+            PrintDebug(L"Invalid character '%c' in env var name", c);
+            return false;
+        }
+        name++;
+    }
+    return true;
+}
+
+/* Delete an env var item with matching name: if name is of the
+ * form xxx=yyy, only the part xxx is used for matchig.
+ */
+static struct env_item *
+env_item_del(struct env_item *head, const WCHAR *name)
+{
+    struct env_item *item, *prev = NULL;
+    BOOL found = FALSE;
+
+    for (item = head; item; item = item->next)
+    {
+        const WCHAR *s1 = item->nameval;
+        const WCHAR *s2 = name;
+        while (*s1 && *s2 && *s1++ == *s2++)
+        {
+            if (*s1 == L'=') /* end of name part of nameval */
+            {
+                if ((*s2 == L'=') || (*s2 == L'\0')) /* name matches */
+                    found = TRUE;
+                break; /* out of the while loop */
+            }
+        }
+        if (found)
+        {
+            if (prev)
+                prev->next = item->next;
+            else
+                head = item->next;
+            free(item->nameval);
+            free(item);
+            PrintDebug(L"env item with name matching '%s' deleted", name);
+            break;
+        }
+        prev = item;
+    }
+    return head;
+}
+
+/* Create a new env item from name=val */
+struct env_item *
+env_item_new(const char *nameval)
+{
+    struct env_item *new = malloc(sizeof(struct env_item));
+
+    if (!new)
+    {
+        PrintDebug(L"No memory for new env item");
+        return NULL;
+    }
+    new->nameval = Widen(nameval);
+    new->next = NULL;
+    if (!new->nameval)
+    {
+        PrintDebug(L"No memory for new env item");
+        free(new);
+        return NULL;
+    }
+    return new;
+}
+
+/* Add a env var item to an env set: any existing item
+ * with same name is replaced by the new entry
+ */
+struct env_item *
+env_item_add(struct env_item *head, struct env_item *item)
+{
+    /* delete any existing item with same name */
+    head = env_item_del(head, item->nameval);
+    item->next = head;
+    return item;
+}
+
+void
+env_item_del_all(struct env_item *head)
+{
+    struct env_item *next;
+    for ( ; head; head = next)
+    {
+        next = head->next;
+        free(head->nameval);
+        free(head);
+    }
 }

@@ -108,6 +108,7 @@ OnReady(connection_t *c, UNUSED char *msg)
 {
     ManagementCommand(c, "state on", NULL, regular);
     ManagementCommand(c, "log all on", OnLogLine, combined);
+    ManagementCommand(c, "echo all on", OnEcho, combined);
 }
 
 
@@ -690,6 +691,110 @@ out:
 }
 
 /*
+ * Handle >ECHO: request from OpenVPN management interface
+ * Expect msg = timestamp,message
+ */
+void
+OnEcho(connection_t *c, char *msg)
+{
+    DWORD status;
+    WCHAR errmsg[256];
+
+    PrintDebug(L"OnEcho with msg = %S", msg);
+    if (!(msg = strchr(msg, ',')))
+    {
+        PrintDebug(L"OnEcho: msg format not recognized");
+        return;
+    }
+    msg++;
+
+    if (strcmp(msg, "forget-passwords") == 0)
+    {
+        DeleteSavedPasswords(c->config_name);
+    }
+    else if (strcmp(msg, "save-passwords") == 0)
+    {
+        c->flags |= (FLAG_SAVE_KEY_PASS | FLAG_SAVE_AUTH_PASS);
+    }
+    else if (strbegins(msg, "save-domain-credential "))
+    {
+        msg = strchr(msg, ' ') + 1;
+        WCHAR *domain = Widen(msg);
+        if (domain)
+        {
+            PrintDebug(L"Saving domain credentials");
+            status = SaveDomainCredentials(c->config_name, domain);
+            if (status)
+            {
+                _sntprintf_0(errmsg,
+                             L"ERROR: SaveDomainCredentials for domain '%s' failed with error = %lu\n", domain, status);
+                WriteStatusLog(c, L"GUI> ", errmsg, false);
+            }
+            free(domain);
+        }
+        else
+        {
+            WriteStatusLog(c, L"GUI> ", L"ERROR: Out of memory in OnEcho()", false);
+        }
+    }
+    else if (strbegins(msg, "setenv "))
+    {
+        /* add name=val to private env set with name prefixed by OPENVPN_ */
+        msg = strchr(msg, ' ') + 1;
+        const char *prefix = "OPENVPN_";
+        char *p;
+        char *nameval;
+
+        if (*msg == ' ')
+        {
+            WriteStatusLog(c, L"GUI> ", L"Error: name empty in echo setenv", false);
+            return;
+        }
+
+        nameval = malloc(strlen(prefix) + strlen(msg));
+        if (!nameval)
+        {
+            WriteStatusLog(c, L"GUI> ", L"Error: Out of memory for adding env var", false);
+            return;
+        }
+
+        strcpy(nameval, prefix);
+        strcat(nameval, msg);
+
+        if ((p = strchr(nameval, ' ')) != NULL)
+        {
+            *p = '\0';
+            if (is_valid_env_name(nameval))
+            {
+                *p = '=';
+                PrintDebug(L"Adding env var '%S'", nameval);
+                struct env_item *new = env_item_new(nameval);
+                if (new)
+                {
+                    /* this removes any exiting item with same name */
+                    c->es = env_item_add(c->es, new);
+                }
+                else
+                    WriteStatusLog(c, L"GUI>", L"Error: No memory for adding env var", false);
+            }
+            else
+                WriteStatusLog(c, L"GUI>", L"Error: empty or illegal name in echo setenv", false);
+            free(nameval);
+        }
+        else
+        {
+            WriteStatusLog(c, L"GUI>", L"Error: no value specified in echo setenv", false);
+            PrintDebug(L"Error: no value specified in 'echo setenv %S'", msg);
+        }
+    }
+    else
+    {
+        _sntprintf_0(errmsg, L"WARNING: Unknown ECHO directive '%S' ignored.", msg);
+        WriteStatusLog(c, L"GUI> ", errmsg, false);
+    }
+}
+
+/*
  * Handle >PASSWORD: request from OpenVPN management interface
  */
 void
@@ -1215,6 +1320,8 @@ Cleanup (connection_t *c)
     CloseManagement (c);
 
     free_dynamic_cr (c);
+    env_item_del_all(c->es);
+    c->es = NULL;
 
     if (c->hProcess)
         CloseHandle (c->hProcess);

@@ -28,6 +28,7 @@ BOOL ManagementCommandFromInputBase64(connection_t *, LPCSTR, HWND, int, int);
 BOOL EnsureDirExists(LPTSTR);
 
 BOOL streq(LPCSTR, LPCSTR);
+BOOL strbegins(const char *str, const char *begin);
 BOOL wcsbegins(LPCWSTR, LPCWSTR);
 
 BOOL ForceForegroundWindow(HWND);
@@ -39,4 +40,14 @@ BOOL CheckFileAccess (const TCHAR *path, int access);
 BOOL Base64Encode(const char *input, int input_len, char **output);
 int Base64Decode(const char *input, char **output);
 WCHAR *Widen(const char *utf8);
+
+struct env_item;
+struct env_item {
+    WCHAR *nameval;
+    struct env_item *next;
+};
+struct env_item *env_item_new(const char *nameval);
+struct env_item *env_item_add(struct env_item *head, struct env_item *item);
+void env_item_del_all(struct env_item *head);
+bool is_valid_env_name(const char *name);
 #endif

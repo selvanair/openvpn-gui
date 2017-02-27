@@ -123,6 +123,7 @@ struct connection {
     HWND hwndStatus;
     int flags;
     char *dynamic_cr;              /* Pointer to buffer for dynamic challenge string received */
+    struct env_item *es;           /* Pointer to the head of config-specific env variables list */
 };
 
 /* All options used within OpenVPN GUI */

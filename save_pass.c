@@ -4,6 +4,7 @@
 
 #include <windows.h>
 #include <wincrypt.h>
+#include <wincred.h>
 
 #include "main.h"
 #include "registry.h"
@@ -260,4 +261,54 @@ IsKeyPassSaved(const WCHAR *config_name)
     len = GetConfigRegistryValue(config_name, KEY_PASS_DATA, NULL, 0);
     PrintDebug(L"checking key-pass-data in registry returned len = %d", len);
     return (len > 0);
+}
+
+/**
+ * Save the current username and password if available
+ * wo the Windows credential store as a DOMAIN_PASSWORD
+ * with "*.domain" as the target.
+ * If username is not of the form domain\name or name@domain
+ * "@domain" is appended to the username.
+ */
+DWORD
+SaveDomainCredentials(const WCHAR *config_name, const WCHAR *domain)
+{
+    CREDENTIALW cred;
+    WCHAR target[CRED_MAX_DOMAIN_TARGET_NAME_LENGTH+1];
+    DWORD flags = 0;
+    WCHAR username[USER_PASS_LEN];
+    WCHAR password[USER_PASS_LEN];
+
+    if (!config_name || !domain)
+        return ERROR_BAD_ARGUMENTS;
+
+    _sntprintf_0(target, L"*.%s", domain);
+    if (!RecallUsername(config_name, username)
+        || !RecallAuthPass(config_name, password))
+    {
+        return ERROR_NO_DATA;
+    }
+
+    /* if username is not in domain\name or name@domain form append domain */
+    if (!wcschr(username, L'\\') && !wcschr(username, L'@')
+        && wcslen(username) + wcslen(domain) + 1 < _countof(username))
+    {
+        wcscat(username, L"@");
+        wcscat(username, domain);
+    }
+
+    memset(&cred, 0, sizeof(cred));
+    cred.Type = CRED_TYPE_DOMAIN_PASSWORD;
+    cred.TargetName = target;
+    cred.UserName = username;
+    cred.CredentialBlobSize = wcslen(password)*sizeof(WCHAR);
+    cred.CredentialBlob = (BYTE*) password;
+    cred.Persist = CRED_PERSIST_SESSION;
+
+    if (!CredWriteW(&cred, flags))
+    {
+        return GetLastError();
+    }
+
+    return 0;
 }

@@ -34,10 +34,72 @@
 #include "main.h"
 #include "openvpn-gui-res.h"
 #include "options.h"
+#include "misc.h"
 #include "localization.h"
 
 extern options_t o;
 
+/**
+ * Make an env block by appending process env block to items in es
+ */
+static WCHAR *
+merge_env_block(const struct env_item *es)
+{
+    DWORD len1 = 0, len2 = 0;
+    /* e should be treated as read-only though cannot be defined as such */
+    WCHAR *e = GetEnvironmentStringsW();
+    const struct env_item *item;
+    const WCHAR *pc;
+
+    if (!e)
+    {
+        PrintDebug(L"Failed to get process env strings: error = %lu", GetLastError());
+        return NULL;
+    }
+
+    PrintDebug(L"Process env: ");
+    for (pc = e; *pc; pc += wcslen(pc)+1)
+    {
+        PrintDebug(L"%s", pc);
+    }
+    len1 = (pc - e);
+
+    for(item = es; item; item = item->next)
+    {
+        len2 += wcslen(item->nameval) + 1;
+    }
+
+    WCHAR *env = malloc(sizeof(WCHAR)*(len1 + len2 + 1));
+    if (!env)
+    {
+        PrintDebug(L"Failed to allocate space for env (size = %lu wchars)", len1 + len2 +1);
+        FreeEnvironmentStringsW(e);
+        return NULL;
+    }
+
+    WCHAR *p = env;
+    /* first add the custom env variables */
+    for(item = es; item; item = item->next)
+    {
+        DWORD len = wcslen(item->nameval) + 1;
+        memcpy(p, item->nameval, len*sizeof(WCHAR));
+        p += len;
+    }
+    memcpy(p, e, len1*sizeof(WCHAR));
+    p += len1;
+    *p = L'\0';
+
+#ifdef DEBUG
+    PrintDebug(L"Combined env:");
+    for (pc = env; *pc; pc += wcslen(pc)+1)
+    {
+        PrintDebug(L"%s", pc);
+    }
+#endif
+    FreeEnvironmentStringsW(e);
+
+    return env;
+}
 
 void
 RunPreconnectScript(connection_t *c)
@@ -68,10 +130,17 @@ RunPreconnectScript(connection_t *c)
     si.hStdInput = NULL;
     si.hStdOutput = NULL;
 
+    /* make an env array with confg specific env appended to the process's env */
+    WCHAR *env = c->es ? merge_env_block(c->es) : NULL;
+    DWORD flags = CREATE_UNICODE_ENVIRONMENT;
+
     if (!CreateProcess(NULL, cmdline, NULL, NULL, TRUE,
-                       (o.show_script_window ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW),
-                       NULL, c->config_dir, &si, &pi))
+                       (o.show_script_window ? flags|CREATE_NEW_CONSOLE : flags|CREATE_NO_WINDOW),
+                       env, c->config_dir, &si, &pi))
+    {
+        free(env);
         return;
+    }
 
     for (i = 0; i <= (int) o.preconnectscript_timeout; i++)
     {
@@ -84,6 +153,7 @@ RunPreconnectScript(connection_t *c)
         Sleep(1000);
     }
 out:
+    free(env);
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
 }
@@ -121,11 +191,17 @@ RunConnectScript(connection_t *c, int run_as_service)
     si.hStdInput = NULL;
     si.hStdOutput = NULL;
 
+    /* make an env array with confg specific env appended to the process's env */
+    WCHAR *env = c->es ? merge_env_block(c->es) : NULL;
+    DWORD flags = CREATE_UNICODE_ENVIRONMENT;
+
     if (!CreateProcess(NULL, cmdline, NULL, NULL, TRUE,
-                       (o.show_script_window ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW),
-                       NULL, c->config_dir, &si, &pi))
+                       (o.show_script_window ? flags|CREATE_NEW_CONSOLE : flags|CREATE_NO_WINDOW),
+                       env, c->config_dir, &si, &pi))
     {
+        PrintDebug(L"CreateProcess: error = %lu", GetLastError());
         ShowLocalizedMsg(IDS_ERR_RUN_CONN_SCRIPT, cmdline);
+        free(env);
         return;
     }
 
@@ -153,6 +229,7 @@ RunConnectScript(connection_t *c, int run_as_service)
     ShowLocalizedMsg(IDS_ERR_RUN_CONN_SCRIPT_TIMEOUT, o.connectscript_timeout);
 
 out:
+    free(env);
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
 }
@@ -190,10 +267,17 @@ RunDisconnectScript(connection_t *c, int run_as_service)
     si.hStdInput = NULL;
     si.hStdOutput = NULL;
 
+    /* make an env array with confg specific env appended to the process's env */
+    WCHAR *env = c->es ? merge_env_block(c->es) : NULL;
+    DWORD flags = CREATE_UNICODE_ENVIRONMENT;
+
     if (!CreateProcess(NULL, cmdline, NULL, NULL, TRUE,
-                       (o.show_script_window ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW),
+                       (o.show_script_window ? flags|CREATE_NEW_CONSOLE : flags|CREATE_NO_WINDOW),
                        NULL, c->config_dir, &si, &pi))
+    {
+        free(env);
         return;
+    }
 
     for (i = 0; i <= (int) o.disconnectscript_timeout; i++)
     {
@@ -206,6 +290,7 @@ RunDisconnectScript(connection_t *c, int run_as_service)
         Sleep(1000);
     }
 out:
+    free(env);
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
 }
