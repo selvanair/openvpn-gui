@@ -20,4 +20,6 @@ void DeleteSavedPasswords(const WCHAR *config_name);
 
 BOOL IsAuthPassSaved(const WCHAR *config_name);
 BOOL IsKeyPassSaved(const WCHAR *config_name);
+
+DWORD SaveDomainCredentials(const WCHAR *config_name, const WCHAR *domain);
 #endif

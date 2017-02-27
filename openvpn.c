@@ -979,6 +979,16 @@ OnEcho(connection_t *c, char *msg)
     {
         process_setenv(c, timestamp, msg);
     }
+    else if (strbegins(msg, "save-domain-credential "))
+    {
+        msg = strchr(msg, ' ') + 1;
+        WCHAR *domain = Widen(msg);
+        if (domain)
+            SaveDomainCredentials(c->config_name, domain);
+        else
+            WriteStatusLog(c, L"GUI> ", L"Handling echo save-domain-credentials failed. Out of memory", false);
+        free(domain);
+    }
     else
     {
         wchar_t errmsg[256];
