@@ -1,7 +1,7 @@
 /*
  *  OpenVPN-GUI -- A Windows GUI for OpenVPN.
  *
- *  Copyright (C) 2013 Heiko Hund <heikoh@users.sf.net>
+ *  Copyright (C) 2013 Selva Nair <selva.nair@gmail.com>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,25 +19,21 @@
  *  59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef MISC_H
-#define MISC_H
+#ifndef ECHO_H
+#define ECHO_H
 
-BOOL ManagementCommandFromInput(connection_t *, LPCSTR, HWND, int);
-BOOL ManagementCommandFromInputBase64(connection_t *, LPCSTR, HWND, int, int);
+#include <wchar.h>
+#include "options.h"
 
-BOOL EnsureDirExists(LPTSTR);
+struct env_item;
+struct env_item {
+    wchar_t *nameval;
+    struct env_item *next;
+};
+struct env_item *env_item_new(const char *nameval);
+struct env_item *env_item_add(struct env_item *head, struct env_item *item);
+void env_item_del_all(struct env_item *head);
+BOOL is_valid_env_name(const char *name);
+void process_echo(connection_t *c, time_t timestamp, const char *msg);
 
-BOOL streq(LPCSTR, LPCSTR);
-BOOL strbegins(const char *str, const char *begin);
-BOOL wcsbegins(LPCWSTR, LPCWSTR);
-
-BOOL ForceForegroundWindow(HWND);
-
-BOOL IsUserAdmin(VOID);
-HANDLE InitSemaphore (void);
-BOOL CheckFileAccess (const TCHAR *path, int access);
-
-BOOL Base64Encode(const char *input, int input_len, char **output);
-int Base64Decode(const char *input, char **output);
-WCHAR *Widen(const char *utf8);
 #endif

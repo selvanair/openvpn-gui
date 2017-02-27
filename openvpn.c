@@ -48,6 +48,7 @@
 #include "misc.h"
 #include "access.h"
 #include "save_pass.h"
+#include "echo.h"
 
 #define WM_OVPN_STOP    (WM_APP + 10)
 #define WM_OVPN_SUSPEND (WM_APP + 11)
@@ -74,9 +75,6 @@ typedef struct {
     char *id;
     char *user;
 } auth_param_t;
-
-static void
-WriteStatusLog (connection_t *c, const WCHAR *prefix, const WCHAR *line, BOOL fileio);
 
 static void
 free_auth_param (auth_param_t *param)
@@ -750,29 +748,16 @@ out:
 void
 OnEcho(connection_t *c, char *msg)
 {
-    WCHAR errmsg[256];
-
     PrintDebug(L"OnEcho with msg = %S", msg);
+    time_t timestamp = strtoul(msg, NULL, 10); /* openvpn prints these as %u */
+
     if (!(msg = strchr(msg, ',')))
     {
         PrintDebug(L"OnEcho: msg format not recognized");
         return;
     }
     msg++;
-
-    if (strcmp(msg, "forget-passwords") == 0)
-    {
-        DeleteSavedPasswords(c->config_name);
-    }
-    else if (strcmp(msg, "save-passwords") == 0)
-    {
-        c->flags |= (FLAG_SAVE_KEY_PASS | FLAG_SAVE_AUTH_PASS);
-    }
-    else
-    {
-        _sntprintf_0(errmsg, L"WARNING: Unknown ECHO directive '%S' ignored.", msg);
-        WriteStatusLog(c, L"GUI> ", errmsg, false);
-    }
+    process_echo(c, timestamp, msg);
 }
 
 /*
@@ -1002,7 +987,7 @@ WrapLine (WCHAR *line)
 /*
  * Write a line to the status log window and optionally to the log file
  */
-static void
+void
 WriteStatusLog (connection_t *c, const WCHAR *prefix, const WCHAR *line, BOOL fileio)
 {
     HWND logWnd = GetDlgItem(c->hwndStatus, ID_EDT_LOG);
@@ -1303,6 +1288,8 @@ Cleanup (connection_t *c)
     CloseManagement (c);
 
     free_dynamic_cr (c);
+    env_item_del_all(c->es);
+    c->es = NULL;
 
     if (c->hProcess)
         CloseHandle (c->hProcess);
