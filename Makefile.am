@@ -32,7 +32,7 @@ MAINTAINERCLEANFILES = \
 	$(srcdir)/config.guess $(srcdir)/config.sub \
 	$(srcdir)/compile
 
-bin_PROGRAMS = openvpn-gui
+bin_PROGRAMS = openvpn-gui save-cred
 
 dist_doc_DATA = \
 	COPYRIGHT.GPL \
@@ -107,6 +107,10 @@ openvpn_gui_LDADD = \
 	-lole32 \
 	-lshlwapi \
 	-lsecur32
+
+save_cred_SOURCES = save_cred.c save_pass.c save_pass.h
+
+save_cred_LDADD = -lcrypt32
 
 openvpn-gui-res.o: $(openvpn_gui_RESOURCES) $(srcdir)/openvpn-gui-res.h
 	$(RCCOMPILE) -i $< -o $@
