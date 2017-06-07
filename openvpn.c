@@ -238,8 +238,12 @@ OnStateChange(connection_t *c, char *data)
             if (strcmp(message, "auth-failure") == 0 || strcmp(message, "private-key-password-failure") == 0)
                 c->failed_psw_attempts++;
 
-            if (strcmp(message, "auth-failure") == 0 && (c->flags & FLAG_SAVE_AUTH_PASS))
-                SaveAuthPass(c->config_name, L""); /* clear saved password */
+            if (strcmp(message, "auth-failure") == 0)
+            {
+                SaveUsername(c->config_name, L"");     /* clear saved username */
+                if (c->flags & FLAG_SAVE_AUTH_PASS)
+                    SaveAuthPass(c->config_name, L""); /* clear saved password */
+            }
 
             else if (strcmp(message, "private-key-password-failure") == 0 && (c->flags & FLAG_SAVE_KEY_PASS))
                 SaveKeyPass(c->config_name, L"");  /* clear saved private key password */
