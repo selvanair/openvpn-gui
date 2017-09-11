@@ -301,6 +301,9 @@ OnStateChange(connection_t *c, char *data)
 
         SetMenuStatus(c, connected);
         SetTrayIcon(connected);
+        /* If password was saved for caching by CredMan only, clear it now */
+        if (!(c->flags & FLAG_SAVE_AUTH_PASS))
+            SaveAuthPass(c->config_name, L""); /* clear saved password */
 
         SetDlgItemText(c->hwndStatus, ID_TXT_STATUS, LoadLocalizedString(IDS_NFO_STATE_CONNECTED));
         SetDlgItemTextW(c->hwndStatus, ID_TXT_IP, ip_txt);
@@ -547,7 +550,10 @@ UserAuthDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                     SecureZeroMemory(password, sizeof(password));
                     return 0;
                 }
-                if ( param->c->flags & FLAG_SAVE_AUTH_PASS && wcslen(password) )
+                /* This version always saves the password for caching by Credential Manager
+                   needed for mapping drives. Will be deleted after connection completes or errors out.
+                 */
+                if ( wcslen(password) )
                 {
                     SaveAuthPass(param->c->config_name, password);
                 }
