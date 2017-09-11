@@ -224,6 +224,9 @@ OnStateChange(connection_t *c, char *data)
 
         SetMenuStatus(c, connected);
         SetTrayIcon(connected);
+        /* If password was saved for caching by CredMan only, clear it now */
+        if (!(c->flags & FLAG_SAVE_AUTH_PASS))
+            SaveAuthPass(c->config_name, L""); /* clear saved password */
 
         SetDlgItemText(c->hwndStatus, ID_TXT_STATUS, LoadLocalizedString(IDS_NFO_STATE_CONNECTED));
         SetStatusWinIcon(c->hwndStatus, ID_ICO_CONNECTED);
@@ -238,7 +241,7 @@ OnStateChange(connection_t *c, char *data)
             if (strcmp(message, "auth-failure") == 0 || strcmp(message, "private-key-password-failure") == 0)
                 c->failed_psw_attempts++;
 
-            if (strcmp(message, "auth-failure") == 0 && (c->flags & FLAG_SAVE_AUTH_PASS))
+            if (strcmp(message, "auth-failure") == 0)
                 SaveAuthPass(c->config_name, L""); /* clear saved password */
 
             else if (strcmp(message, "private-key-password-failure") == 0 && (c->flags & FLAG_SAVE_KEY_PASS))
@@ -335,9 +338,11 @@ UserAuthDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             {
                 SaveUsername(param->c->config_name, username);
             }
-            if ( param->c->flags & FLAG_SAVE_AUTH_PASS &&
-                 GetDlgItemTextW(hwndDlg, ID_EDT_AUTH_PASS, password, _countof(password)) &&
-                 wcslen(password) )
+            /* This version always saves the password for caching by Credential Manager
+               needed for mapping drives. Will be deleted after connection completes or errors out.
+             */
+            if (GetDlgItemTextW(hwndDlg, ID_EDT_AUTH_PASS, password, _countof(password)) &&
+                 wcslen(password))
             {
                 SaveAuthPass(param->c->config_name, password);
                 SecureZeroMemory(password, sizeof(password));
