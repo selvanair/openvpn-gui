@@ -318,6 +318,14 @@ UserAuthDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         {
             SetDlgItemTextW(hwndDlg, ID_EDT_AUTH_PASS, password);
             SecureZeroMemory(password, sizeof(password));
+            if (!(param->flags & FLAG_CR_TYPE_SCRV1) && o.silent_connection)
+            {
+                /* no challenge and silent: bypass the dialog and use the saved password */
+                ManagementCommandFromInput(param->c, "username \"Auth\" \"%s\"", hwndDlg, ID_EDT_AUTH_USER);
+                ManagementCommandFromInput(param->c, "password \"Auth\" \"%s\"", hwndDlg, ID_EDT_AUTH_PASS);
+                EndDialog(hwndDlg, LOWORD(wParam));
+                return TRUE;
+            }
         }
         if (param->c->flags & FLAG_DISABLE_SAVE_PASS)
             ShowWindow(GetDlgItem (hwndDlg, ID_CHK_SAVE_PASS), SW_HIDE);
