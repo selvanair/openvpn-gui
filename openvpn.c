@@ -111,6 +111,9 @@ show_error_tip(HWND editbox, const WCHAR *msg)
     bt.cbStruct = sizeof(EDITBALLOONTIP);
     bt.pszText = msg;
     bt.pszTitle = L"Invalid input";
+#ifndef TTI_ERROR_LARGE
+#define TTI_ERROR_LARGE 6
+#endif
     bt.ttiIcon = TTI_ERROR_LARGE;
 
     SendMessage(editbox, EM_SHOWBALLOONTIP, 0, (LPARAM)&bt);
