@@ -453,3 +453,11 @@ Widen(const char *utf8)
 
     return wstr;
 }
+
+/* Return false if input contains any characters in exclude */
+BOOL
+validate_input(const WCHAR *input)
+{
+    const WCHAR *exclude = L"\n";
+    return (wcspbrk(input, exclude) == NULL);
+}
