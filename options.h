@@ -33,6 +33,7 @@ typedef struct connection connection_t;
 #include <lmcons.h>
 
 #include "manage.h"
+#include "echo.h"
 
 #define MAX_NAME (UNLEN + 1)
 
@@ -87,6 +88,7 @@ typedef struct {
 #define FLAG_SAVE_KEY_PASS  (1<<4)
 #define FLAG_SAVE_AUTH_PASS (1<<5)
 #define FLAG_DISABLE_SAVE_PASS (1<<6)
+#define FLAG_DISABLE_ECHO_MSG  (1<<7)
 
 typedef struct {
     unsigned short major, minor, build, revision;
@@ -126,6 +128,7 @@ struct connection {
     int flags;
     char *dynamic_cr;              /* Pointer to buffer for dynamic challenge string received */
     struct env_item *es;           /* Pointer to the head of config-specific env variables list */
+    struct echo_msg echo_msg;      /* Current message echo-ed from server or client config */
 };
 
 /* All options used within OpenVPN GUI */
@@ -181,6 +184,7 @@ typedef struct {
     unsigned int dpi_scale;
     COLORREF clr_warning;
     COLORREF clr_error;
+    DWORD popup_mute_interval; /* Interval in hours to suppress repeated echo messages */
 } options_t;
 
 void InitOptions(options_t *);

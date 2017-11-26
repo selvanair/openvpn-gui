@@ -268,6 +268,7 @@ OnStateChange(connection_t *c, char *data)
         }
 
         c->state = reconnecting;
+        echo_msg_clear(c, false);
         CheckAndSetTrayIcon();
 
         SetDlgItemText(c->hwndStatus, ID_TXT_STATUS, LoadLocalizedString(IDS_NFO_STATE_RECONNECTING));
@@ -1290,6 +1291,7 @@ Cleanup (connection_t *c)
     free_dynamic_cr (c);
     env_item_del_all(c->es);
     c->es = NULL;
+    echo_msg_clear(c, false); /* keep echo message history */
 
     if (c->hProcess)
         CloseHandle (c->hProcess);

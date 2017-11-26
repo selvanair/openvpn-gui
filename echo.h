@@ -34,6 +34,22 @@ struct env_item *env_item_new(const char *nameval);
 struct env_item *env_item_add(struct env_item *head, struct env_item *item);
 void env_item_del_all(struct env_item *head);
 BOOL is_valid_env_name(const char *name);
+
+struct echo_msg_history;
+struct echo_msg {
+#define ECHO_MSG_WINDOW (1)
+#define ECHO_MSG_NOTIFY (2)
+#define HASHLEN 20
+    time_t timestamp;
+    wchar_t *title;
+    wchar_t *text;
+    int length;
+    int type;
+    BYTE digest[HASHLEN];
+    struct echo_msg_history *history;
+};
+
 void process_echo(connection_t *c, time_t timestamp, const char *msg);
+void echo_msg_clear(connection_t *c, BOOL clear_history);
 
 #endif

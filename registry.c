@@ -60,7 +60,8 @@ struct regkey_int {
       {L"connectscript_timeout", &o.connectscript_timeout, 30},
       {L"disconnectscript_timeout", &o.disconnectscript_timeout, 10},
       {L"show_script_window", &o.show_script_window, 0},
-      {L"service_only", &o.service_only, 0}
+      {L"service_only", &o.service_only, 0},
+      {L"popup_mute_interval", &o.popup_mute_interval, 24}
     };
 
 static int

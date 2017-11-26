@@ -203,6 +203,11 @@ add_option(options_t *options, int i, TCHAR **p)
         ++i;
         options->preconnectscript_timeout = _ttoi(p[1]);
     }
+    else if (streq(p[0], _T("popup_mute_interval")) && p[1])
+    {
+        ++i;
+        options->popup_mute_interval = _ttoi(p[1]);
+    }
     else
     {
         /* Unrecognized option or missing parameter */
@@ -544,4 +549,10 @@ DisableSavePasswords(connection_t *c)
     DeleteSavedPasswords(c->config_name);
     c->flags &= ~(FLAG_SAVE_AUTH_PASS | FLAG_SAVE_KEY_PASS);
     c->flags |= FLAG_DISABLE_SAVE_PASS;
+}
+
+void
+DisableEchoMsg(connection_t *c)
+{
+    c->flags |= FLAG_DISABLE_ECHO_MSG;
 }

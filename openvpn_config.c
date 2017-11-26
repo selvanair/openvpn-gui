@@ -93,7 +93,10 @@ AddConfigFileToList(int config, const TCHAR *filename, const TCHAR *config_dir)
     connection_t *c = &o.conn[config];
     int i;
 
+    /* preserve echo message history */
+    struct echo_msg emsg = c->echo_msg;
     memset(c, 0, sizeof(*c));
+    c->echo_msg = emsg;
 
     _tcsncpy(c->config_file, filename, _countof(c->config_file) - 1);
     _tcsncpy(c->config_dir, config_dir, _countof(c->config_dir) - 1);
