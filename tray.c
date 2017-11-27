@@ -331,7 +331,7 @@ ShowTrayBalloon(TCHAR *infotitle_msg, TCHAR *info_msg)
     ni.uID = 0;
     ni.hWnd = o.hWnd;
     ni.uFlags = NIF_INFO;
-    ni.uTimeout = 5000;
+    ni.uVersion = NOTIFYICON_VERSION_4;
     ni.dwInfoFlags = NIIF_INFO;
     _tcsncpy(ni.szInfo, info_msg, _countof(ni.szInfo));
     _tcsncpy(ni.szInfoTitle, infotitle_msg, _countof(ni.szInfoTitle));

@@ -26,10 +26,10 @@
 #include <windows.h>
 #include <wchar.h>
 #include "main.h"
-#include "echo.h"
-#include "save_pass.h"
 #include "misc.h"
 #include "openvpn.h"
+#include "echo.h"
+#include "save_pass.h"
 
 /* To match with openvpn we accept only :ALPHA:, :DIGIT: or '_' in names */
 BOOL
