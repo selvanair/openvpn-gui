@@ -41,7 +41,8 @@ typedef struct connection connection_t;
  * including the option name itself.
  */
 #define MAX_PARMS           5   /* Max number of parameters per option */
-
+/* Menu ids are constructed as 12 bits for config number, 4 bits for action */
+#define MAX_CONFIGS         (1<<12)
 
 typedef enum {
     service_noaccess     = -1,
@@ -91,11 +92,23 @@ typedef struct {
     unsigned short major, minor, build, revision;
 } version_t;
 
+/* A simple tree of config groups that can be navigated from the end
+ * leaf (config file) to the root.
+ */
+typedef struct {
+    wchar_t name[40]; /* name of the group -- possibly truncated */
+    int parent_id;    /* id of the parent group */
+    int children;     /* number of children groups and configs */
+    BOOL active;      /* displayed in the menu if true -- used to prune empty groups */
+    int id;           /* a unique index of the item */
+} config_group_t;
+
 /* Connections parameters */
 struct connection {
     TCHAR config_file[MAX_PATH];    /* Name of the config file */
     TCHAR config_name[MAX_PATH];    /* Name of the connection */
     TCHAR config_dir[MAX_PATH];     /* Path to this configs dir */
+    int   group_id;                 /* Index of config group */
     TCHAR log_path[MAX_PATH];       /* Path to Logfile */
     TCHAR ip[16];                   /* Assigned IP address for this connection */
     TCHAR ipv6[46];                 /* Assigned IPv6 address */
@@ -132,11 +145,17 @@ struct connection {
 /* All options used within OpenVPN GUI */
 typedef struct {
     /* Array of configs to autostart */
-    const TCHAR *auto_connect[MAX_CONFIGS];
+    const TCHAR **auto_connect;
 
     /* Connection parameters */
-    connection_t conn[MAX_CONFIGS];   /* Connection structure */
+    connection_t *conn;               /* Connection structure */
+    config_group_t *groups;
     int num_configs;                  /* Number of configs */
+    int num_auto_connect;             /* Number of auto-connect configs */
+    int num_groups;                   /* Number of config groups */
+    int max_configs;                  /* current capacity of conn array */
+    int max_auto_connect;             /* current capacity of auto_connect array */
+    int max_groups;                   /* current capacity of groups array */
 
     service_state_t service_state;    /* State of the OpenVPN Service */
 
@@ -168,6 +187,7 @@ typedef struct {
     DWORD connectscript_timeout;        /* Connect Script execution timeout (sec) */
     DWORD disconnectscript_timeout;     /* Disconnect Script execution timeout (sec) */
     DWORD preconnectscript_timeout;     /* Preconnect Script execution timeout (sec) */
+    DWORD config_menu_view;             /* 0 for auto, 1 for original flat menu, 2 for hierarchical */
 
 #ifdef DEBUG
     FILE *debug_fp;

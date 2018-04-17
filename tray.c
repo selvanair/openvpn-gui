@@ -38,26 +38,79 @@
 #include "openvpn-gui-res.h"
 #include "localization.h"
 #include "misc.h"
+#include "assert.h"
 
 /* Popup Menus */
 HMENU hMenu;
 HMENU hMenuConn[MAX_CONFIGS];
 HMENU hMenuService;
 
+/* A struct to store nodes in the menu tree */
+typedef struct {
+    HMENU h;         /* menu handle */
+    int pos;         /* menu position within parent -- needed for sending messages */
+    int entries;     /* number of entries in a menu */
+} group_menu_t;
+
+/* We need to construct the menu tree dynamically as the number of
+ * of directory nodes is not guaranteed to be < MAX_CONFIGS.
+ * But for connection profiles (configs) we use a static
+ * array: wastes at most ~32KB
+ */
+group_menu_t *groupMenu;
+
+int configPos[MAX_CONFIGS]; /* position of config in its group menu */
+
 NOTIFYICONDATA ni;
 extern options_t o;
 
+
+#define USE_GROUPED_CONFIG_MENU ((o.config_menu_view == 0 && o.num_configs > 50) || (o.config_menu_view == 2))
+
+static void
+SetMenuImage(HMENU h, int pos)
+{
+    MENUITEMINFO mi =
+    {
+        .cbSize = sizeof(mi),
+        .fMask = MIIM_BITMAP|MIIM_DATA,
+        .hbmpItem = HBMMENU_SYSTEM,
+    };
+    mi.dwItemData = (ULONG_PTR) o.hWnd;
+    SetMenuItemInfo(h, pos, TRUE, &mi);
+}
 
 /* Create popup menus */
 void
 CreatePopupMenus()
 {
     int i;
+
+    /* We use groupMenu[0].h as the root menu, so,
+     * even if num_configs = 0, we want num_groups > 0.
+     * This is guaranteed as the root node is always defined.
+     */
+    assert(o.num_groups > 0);
+
+    void *tmp = realloc(groupMenu, sizeof(*groupMenu)*o.num_groups);
+    if (!tmp)
+    {
+        ErrorExit(1, L"Out of memory while creating menus");
+    }
+    groupMenu = tmp;
+
     for (i = 0; i < o.num_configs; i++)
+    {
         hMenuConn[i] = CreatePopupMenu();
+    }
+    for (i = 0; i < o.num_groups; i++)
+    {
+        groupMenu[i].h = CreatePopupMenu();
+        groupMenu[i].entries = 0;
+    }
 
     hMenuService = CreatePopupMenu();
-    hMenu = CreatePopupMenu();
+    hMenu = groupMenu[0].h; /* the first group menu is also the root menu */
 
     if (o.num_configs == 1) {
         /* Create Main menu with actions */
@@ -91,13 +144,47 @@ CreatePopupMenus()
         AppendMenu(hMenu, MF_STRING ,IDM_SETTINGS, LoadLocalizedString(IDS_MENU_SETTINGS));
         AppendMenu(hMenu, MF_STRING ,IDM_CLOSE, LoadLocalizedString(IDS_MENU_CLOSE));
 
-        SetMenuStatus(&o.conn[0],  o.conn[0].state);
+        SetMenuStatusById(0,  o.conn[0].state);
     }
     else {
         /* Create Main menu with all connections */
         int i;
         for (i = 0; i < o.num_configs; i++)
-            AppendMenu(hMenu, MF_POPUP, (UINT_PTR) hMenuConn[i], o.conn[i].config_name);
+        {
+            connection_t *c = &o.conn[i];
+            group_menu_t *current = &groupMenu[0]; /* the root menu by default */
+
+            if (USE_GROUPED_CONFIG_MENU)
+            {
+                if (c->group_id >= 0 && c->group_id < o.num_groups) /* should be always true */
+                    current = &groupMenu[c->group_id];
+            }
+
+            /* Add config to the current sub menu */
+            AppendMenu(current->h, MF_POPUP, (UINT_PTR) hMenuConn[i], o.conn[i].config_name);
+            configPos[i] = current->entries++;
+            //SetMenuImage(current->h, configPos[i]);
+            PrintDebug(L"Config %d name %s in group %d with position = %d group_id = %d",
+                        i, o.conn[i].config_name, c->group_id, configPos[i], o.conn[i].group_id);
+        }
+
+        /* construct the submenu tree */
+        if (USE_GROUPED_CONFIG_MENU)
+        {
+            /* i = 0 is the root menu and has no parent */
+            for (i = 1; i < o.num_groups; i++)
+            {
+                if (!o.groups[i].active)
+                    continue;
+                int parent = o.groups[i].parent_id;
+                if (parent < 0 || parent > o.num_groups) /* should not happen */
+                    continue;
+                AppendMenu(groupMenu[parent].h, MF_POPUP, (UINT_PTR) groupMenu[i].h, o.groups[i].name);
+                groupMenu[i].pos = groupMenu[parent].entries++;
+                PrintDebug(L"Group %d name %s added to Parent %d with position = %d",
+                        i, o.groups[i].name, parent, groupMenu[i].pos);
+            }
+        }
 
         if (o.num_configs > 0)
             AppendMenu(hMenu, MF_SEPARATOR, 0, 0);
@@ -134,7 +221,7 @@ CreatePopupMenus()
                 AppendMenu(hMenuConn[i], MF_STRING, IDM_PASSPHRASEMENU + i, LoadLocalizedString(IDS_MENU_PASSPHRASE));
 #endif
 
-            SetMenuStatus(&o.conn[i], o.conn[i].state);
+            SetMenuStatusById(i, o.conn[i].state);
         }
     }
 
@@ -146,12 +233,10 @@ CreatePopupMenus()
 static void
 DestroyPopupMenus()
 {
-    int i;
-    for (i = 0; i < o.num_configs; i++)
-        DestroyMenu(hMenuConn[i]);
-
     DestroyMenu(hMenuService);
-    DestroyMenu(hMenu);
+    DestroyMenu(hMenu); /* this destroys all sub-menus */
+    hMenuService = NULL;
+    hMenu = NULL;
 }
 
 
@@ -218,6 +303,7 @@ void
 OnDestroyTray()
 {
     DestroyMenu(hMenu);
+    hMenu = NULL;
     Shell_NotifyIcon(NIM_DELETE, &ni);
 }
 
@@ -350,8 +436,30 @@ ShowTrayBalloon(TCHAR *infotitle_msg, TCHAR *info_msg)
 void
 SetMenuStatus(connection_t *c, conn_state_t state)
 {
+    int i;
+    for (i = 0; i < o.num_configs; ++i)
+    {
+        if (c == &o.conn[i])
+        {
+            SetMenuStatusById(i, state);
+            break;
+        }
+    }
+}
+
+void
+SetMenuStatusById(int i, conn_state_t state)
+{
+    if (i < 0 || i >= o.num_configs)
+        return;
+
+    connection_t *c = &o.conn[i];
+    BOOL checked = (state == connected || state == disconnecting);
+
+
     if (o.num_configs == 1)
     {
+        CheckMenuItem(hMenu, 0, MF_BYPOSITION | (checked ? MF_CHECKED : MF_UNCHECKED));
         if (state == disconnected)
         {
             EnableMenuItem(hMenu, IDM_CONNECTMENU, MF_ENABLED);
@@ -380,15 +488,28 @@ SetMenuStatus(connection_t *c, conn_state_t state)
     }
     else
     {
-        int i;
-        for (i = 0; i < o.num_configs; ++i)
+        int group_id = 0;
+        int pos = configPos[i];
+
+        if (USE_GROUPED_CONFIG_MENU)
+            group_id = c->group_id;
+
+        CheckMenuItem(groupMenu[group_id].h, pos, MF_BYPOSITION | (checked ? MF_CHECKED : MF_UNCHECKED));
+
+        PrintDebug(L"setting state of config %s with group_name %s checked = %d, parent %s, pos %d",
+                    c->config_name, o.groups[group_id].name, checked, (group_id == 0)? L"Main Menu" : L"SubMenu", pos);
+
+        if (checked) /* also check all parent groups */
         {
-            if (c == &o.conn[i])
-                break;
+            while (group_id > 0)
+            {
+                pos = groupMenu[group_id].pos;
+                group_id = o.groups[group_id].parent_id;
+                PrintDebug(L"checking sub menu with id %d pos %d", group_id, pos);
+                CheckMenuItem(groupMenu[group_id].h, pos, MF_BYPOSITION | MF_CHECKED);
+            }
         }
 
-        BOOL checked = (state == connected || state == disconnecting);
-        CheckMenuItem(hMenu, i, MF_BYPOSITION | (checked ? MF_CHECKED : MF_UNCHECKED));
 
         if (state == disconnected)
         {

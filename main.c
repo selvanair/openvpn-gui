@@ -80,7 +80,7 @@ VerifyAutoConnections()
 {
     int i;
 
-    for (i = 0; i < MAX_CONFIGS && o.auto_connect[i] != 0; i++)
+    for (i = 0; i < o.num_auto_connect; i++)
     {
         if (GetConnByName(o.auto_connect[i]) == NULL)
         {
@@ -829,4 +829,17 @@ DWORD GetDllVersion(LPCTSTR lpszDllName)
         FreeLibrary(hinstDll);
     }
     return dwVersion;
+}
+
+void
+ErrorExit(int exit_code, const wchar_t *msg)
+{
+    /*  send a message to cleanly close all open connections */
+    if (o.hWnd)
+        SendMessage(o.hWnd, WM_CLOSE, 0, 0);
+    if (msg)
+        MessageBoxExW(NULL, msg, TEXT(PACKAGE_NAME),
+                      MB_OK | MB_SETFOREGROUND|MB_ICONERROR, GetGUILanguage());
+    /* when the user clicks OK we'll exit unless the process has already exited */
+    exit(exit_code);
 }

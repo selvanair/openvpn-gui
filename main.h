@@ -132,4 +132,6 @@ DWORD GetDllVersion(LPCTSTR lpszDllName);
 
 #define DPI_SCALE(x) MulDiv(x, o.dpi_scale, 100)
 
+void ErrorExit(int exit_code, const wchar_t *msg);
+
 #endif
