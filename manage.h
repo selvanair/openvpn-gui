@@ -37,6 +37,7 @@ typedef enum {
     needok,
     needstr,
     pkcs11_id_count,
+    timeout,
     mgmt_rtmsg_type_max
 } mgmt_rtmsg_type;
 
