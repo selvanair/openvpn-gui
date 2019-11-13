@@ -44,6 +44,7 @@ BOOL
 Base64Encode(const char *input, int input_len, char **output)
 {
     DWORD output_len;
+    DWORD flags = CRYPT_STRING_BASE64|CRYPT_STRING_NOCRLF;
 
     if (input_len == 0)
     {
@@ -52,7 +53,7 @@ Base64Encode(const char *input, int input_len, char **output)
         return TRUE;
     }
     if (!CryptBinaryToStringA((const BYTE *) input, (DWORD) input_len,
-        CRYPT_STRING_BASE64, NULL, &output_len) || output_len == 0)
+        flags, NULL, &output_len) || output_len == 0)
     {
 #ifdef DEBUG
         PrintDebug (L"Error in CryptBinaryToStringA: input = '%.*S'", input_len, input);
@@ -65,7 +66,7 @@ Base64Encode(const char *input, int input_len, char **output)
         return FALSE;
 
     if (!CryptBinaryToStringA((const BYTE *) input, (DWORD) input_len,
-        CRYPT_STRING_BASE64, *output, &output_len))
+        flags, *output, &output_len))
     {
 #ifdef DEBUG
         PrintDebug (L"Error in CryptBinaryToStringA: input = '%.*S'", input_len, input);
