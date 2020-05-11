@@ -269,6 +269,7 @@ IsKeyPassSaved(const WCHAR *config_name)
  * with "*.domain" as the target.
  * If username is not of the form domain\name or name@domain
  * "@domain" is appended to the username.
+ * Also save the same credential for target = domain without the *.
  */
 DWORD
 SaveDomainCredentials(const WCHAR *config_name, const WCHAR *domain)
@@ -278,6 +279,7 @@ SaveDomainCredentials(const WCHAR *config_name, const WCHAR *domain)
     DWORD flags = 0;
     WCHAR username[USER_PASS_LEN];
     WCHAR password[USER_PASS_LEN];
+    DWORD err = 0;
 
     if (!config_name || !domain)
         return ERROR_BAD_ARGUMENTS;
@@ -307,8 +309,16 @@ SaveDomainCredentials(const WCHAR *config_name, const WCHAR *domain)
 
     if (!CredWriteW(&cred, flags))
     {
-        return GetLastError();
+        err = GetLastError();
     }
 
-    return 0;
+    /* also same with target = domain */
+    _sntprintf_0(target, L"%s", domain);
+    cred.TargetName = target;
+    if (!CredWriteW(&cred, flags))
+    {
+        err = GetLastError();
+    }
+
+    return err;
 }
