@@ -36,6 +36,10 @@
 #include "misc.h"
 #include "main.h"
 
+#ifndef CRYPT_STRING_NOCRLF
+#define CRYPT_STRING_NOCRLF 0x40000000
+#endif
+
 /*
  * Helper function to do base64 conversion through CryptoAPI
  * Returns TRUE on success, FALSE on error. Caller must free *output.
