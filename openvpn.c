@@ -784,13 +784,13 @@ OnEcho(connection_t *c, char *msg)
             }
             else
                 WriteStatusLog(c, L"GUI>", L"Error: empty or illegal name in echo setenv", false);
-            free(nameval);
         }
         else
         {
             WriteStatusLog(c, L"GUI>", L"Error: no value specified in echo setenv", false);
             PrintDebug(L"Error: no value specified in 'echo setenv %S'", msg);
         }
+        free(nameval);
     }
     else
     {
