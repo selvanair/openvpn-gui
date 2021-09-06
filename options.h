@@ -120,6 +120,17 @@ typedef struct config_group {
     HMENU menu;                  /* Handle to menu entry for this group */
 } config_group_t;
 
+typedef struct remote_entry remote_entry_t;
+struct remote_list
+{
+    unsigned int count;    /* number of remotes entries in config */
+    unsigned int selected; /* remote selected by user: -1 if no selection */
+    unsigned int state;    /* a flag indicating remote list filling status */
+    char current[256];     /* buffer to store proposed remote string from daemon */
+    remote_entry_t *re;    /* array of remote entries */
+    BOOL show_sorted;      /* preferred display order -- sorted or not */
+};
+
 /* short hand for pointer to the group a config belongs to */
 #define CONFIG_GROUP(c) (&o.groups[(c)->group])
 #define PARENT_GROUP(cg) ((cg)->parent < 0 ? NULL : &o.groups[(cg)->parent])
@@ -168,6 +179,7 @@ struct connection {
     struct pkcs11_list pkcs11_list;
     char daemon_state[20];         /* state of openvpn.ex: WAIT, AUTH, GET_CONFIG etc.. */
     unsigned int management_version;
+    struct remote_list remote_list;
 };
 
 /* All options used within OpenVPN GUI */

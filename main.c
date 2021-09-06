@@ -51,6 +51,8 @@
 #include "save_pass.h"
 #include "echo.h"
 #include "as.h"
+#include "remote.h"
+#include "commctrl.h"
 
 #ifndef DISABLE_CHANGE_PASSWORD
 #include <openssl/crypto.h>
@@ -191,6 +193,7 @@ int WINAPI _tWinMain (HINSTANCE hThisInstance,
       { bytecount_,OnByteCount },
       { infomsg_,  OnInfoMsg },
       { timeout_,  OnTimeout },
+      { remote_,   OnRemote },
       { 0,        NULL }
   };
   InitManagement(handler);

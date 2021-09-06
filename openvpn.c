@@ -61,6 +61,7 @@
 #include "env_set.h"
 #include "echo.h"
 #include "pkcs11.h"
+#include "remote.h"
 
 #define OPENVPN_SERVICE_PIPE_NAME_OVPN2 L"\\\\.\\pipe\\openvpn\\service"
 #define OPENVPN_SERVICE_PIPE_NAME_OVPN3 L"\\\\.\\pipe\\ovpnagent"
@@ -117,7 +118,6 @@ show_error_tip(HWND editbox, const WCHAR *msg)
 void
 OnReady(connection_t *c, char *msg)
 {
-    unsigned int version;
     if (sscanf(msg, "OpenVPN Management Interface Version %ul", &c->management_version) != 1)
     {
         WriteStatusLog(c, L">GUI", L"Error parsing Management interface version", false);
@@ -385,6 +385,11 @@ OnStateChange(connection_t *c, char *data)
             SetDlgItemText(c->hwndStatus, ID_TXT_STATUS, LoadLocalizedString(IDS_NFO_STATE_RECONNECTING));
             SetDlgItemTextW(c->hwndStatus, ID_TXT_IP, L"");
             SetStatusWinIcon(c->hwndStatus, ID_ICO_CONNECTING);
+        }
+        /* if a SIGHUP restart -- invalidate remote_list */
+        if (strcmp(message, "SIGHUP") == 0)
+        {
+            remote_list_clear(c);
         }
     }
 }
@@ -1865,6 +1870,7 @@ Cleanup (connection_t *c)
     c->es = NULL;
     echo_msg_clear(c, true); /* clear history */
     pkcs11_list_clear(&c->pkcs11_list);
+    remote_list_clear(c);
 
     if (c->hProcess)
         CloseHandle (c->hProcess);

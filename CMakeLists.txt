@@ -30,6 +30,7 @@ add_executable(${PROJECT_NAME} WIN32
     as.c
     pkcs11.c
     config_parser.c
+    remote.c
     res/openvpn-gui-res.rc)
 
 find_package(OpenSSL REQUIRED)
@@ -111,6 +112,7 @@ add_library(${PROJECT_NAME_PLAP} SHARED
     registry.c
     config_parser.c
     service.c
+    remote.c
     plap/ui_glue.c
     plap/stub.c
     plap/plap_common.c

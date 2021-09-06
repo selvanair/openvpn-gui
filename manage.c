@@ -386,6 +386,11 @@ OnManagement(SOCKET sk, LPARAM lParam)
                         cmd->handler(c, line);
                     UnqueueCommand(c);
                 }
+                else if (strncmp(pos, "REMOTE:", 7) == 0)
+                {
+                    if (rtmsg_handler[remote_])
+                        rtmsg_handler[remote_](c, pos + 7);
+                }
             }
             else if (c->manage.cmd_queue)
             {

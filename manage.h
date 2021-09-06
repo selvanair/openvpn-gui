@@ -39,6 +39,7 @@ typedef enum {
     pkcs11_id_count_,
     infomsg_,
     timeout_,
+    remote_,
     mgmt_rtmsg_type_max
 } mgmt_rtmsg_type;
 

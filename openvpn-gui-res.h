@@ -163,6 +163,11 @@
 #define ID_LVW_PKCS11                    451
 #define ID_TXT_PKCS11                    452
 
+/* remote-query dialog */
+#define ID_DLG_REMOTE_QUERY              460
+#define ID_LVW_REMOTE                    461
+#define ID_TXT_REMOTE                    462
+
 /*
  * String Table Resources
  */

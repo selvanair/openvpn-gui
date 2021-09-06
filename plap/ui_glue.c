@@ -41,6 +41,7 @@
 #include "misc.h"
 #include "tray.h"
 #include "service.h"
+#include "remote.h"
 
 /* Global options structure */
 options_t o;
@@ -160,6 +161,19 @@ OnStateChange_(connection_t *c, char *msg)
     }
 }
 
+void
+OnRemote_(connection_t *c, char *msg)
+{
+    if (c == active_profile)
+    {
+        OnRemote(c, msg);
+    }
+    else
+    {
+        DetachOpenVPN(c); /* next attach will handle it */
+    }
+}
+
 /* Initialize GUI data structures. Returns 0 on success */
 DWORD
 InitializeUI(HINSTANCE hinstance)
@@ -215,6 +229,7 @@ InitializeUI(HINSTANCE hinstance)
       { bytecount_,OnByteCount },
       { infomsg_,  OnInfoMsg_ },
       { timeout_,  OnTimeout },
+      { remote_,   OnRemote_ },
       { 0,         NULL}
     };
 
