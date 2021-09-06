@@ -167,6 +167,7 @@ struct connection {
     struct echo_msg echo_msg;      /* Message echo-ed from server or client config and related data */
     struct pkcs11_list pkcs11_list;
     char daemon_state[20];         /* state of openvpn.ex: WAIT, AUTH, GET_CONFIG etc.. */
+    unsigned int management_version;
 };
 
 /* All options used within OpenVPN GUI */

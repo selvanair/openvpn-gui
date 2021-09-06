@@ -115,8 +115,14 @@ show_error_tip(HWND editbox, const WCHAR *msg)
  * Format: <BANNER>
  */
 void
-OnReady(connection_t *c, UNUSED char *msg)
+OnReady(connection_t *c, char *msg)
 {
+    unsigned int version;
+    if (sscanf(msg, "OpenVPN Management Interface Version %ul", &c->management_version) != 1)
+    {
+        WriteStatusLog(c, L">GUI", L"Error parsing Management interface version", false);
+        c->management_version = 2; /* Assume release v2.4+ or later */
+    }
     ManagementCommand(c, "state on", NULL, regular);
     ManagementCommand(c, "log on all", OnLogLine, combined);
     ManagementCommand(c, "echo on all", OnEcho, combined);
