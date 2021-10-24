@@ -155,7 +155,7 @@ echo_msg_persist(connection_t *c)
     {
         data[i++] = hist->fp;
     }
-    if (!SetConfigRegistryValueBinary(c->config_name, L"echo_msg_history", (BYTE *) data, size))
+    if (!SetConfigRegistryValueBinary(c->config_name, L"echo_msg_history", (BYTE *) data, (DWORD) size))
         WriteStatusLog(c, L"GUI> ", L"Failed to persist echo msg history: error writing to registry", false);
 
     free(data);
@@ -179,7 +179,7 @@ echo_msg_load(connection_t *c)
     }
 
     data = malloc(size);
-    if (!data || !GetConfigRegistryValue(c->config_name, L"echo_msg_history", (BYTE*) data, size))
+    if (!data || !GetConfigRegistryValue(c->config_name, L"echo_msg_history", (BYTE*) data, (DWORD) size))
         goto out;
 
     size_t len = size/item_len;
@@ -464,13 +464,13 @@ AddMessageBoxText(HWND hwnd, const wchar_t *text, const wchar_t *title, const wc
      * We allow the window to grow by upto 50 lines beyond a
      * max value before truncating
      */
-    int pos2 = SendMessage(hmsg, EM_GETLINECOUNT, 0, 0);
+    LRESULT pos2 = SendMessage(hmsg, EM_GETLINECOUNT, 0, 0);
     if (pos2 > MAX_MSG_LINES + 50)
     {
-        int pos1 = SendMessage(hmsg, EM_LINEINDEX, MAX_MSG_LINES, 0);
-        SendMessage(hmsg, EM_SETSEL, pos1, -1);
+        LRESULT pos1 = SendMessage(hmsg, EM_LINEINDEX, MAX_MSG_LINES, 0);
+        SendMessage(hmsg, EM_SETSEL, (LPARAM) pos1, -1);
         SendMessage(hmsg, EM_REPLACESEL, FALSE, (LPARAM) _T(""));
-        PrintDebug(L"Text from character position %d to end removed", pos1);
+        PrintDebug(L"Text from character position %d to end removed", (int) pos1);
     }
 
     /* Select top of the message and scroll to there */

@@ -48,7 +48,7 @@ static match_t
 match(const WIN32_FIND_DATA *find, const TCHAR *ext)
 {
     size_t ext_len = _tcslen(ext);
-    int i;
+    size_t i;
 
     if (find->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
         return match_dir;
@@ -104,7 +104,7 @@ AddConfigFileToList(int config, const TCHAR *filename, const TCHAR *config_dir)
     c->manage.sk = INVALID_SOCKET;
     c->manage.skaddr.sin_family = AF_INET;
     c->manage.skaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    c->manage.skaddr.sin_port = htons(o.mgmt_port_offset + config);
+    c->manage.skaddr.sin_port = htons((o.mgmt_port_offset + config) & 0xFF);
 
 #ifndef DISABLE_CHANGE_PASSWORD
     if (CheckKeyFileWriteAccess (c))

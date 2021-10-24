@@ -161,7 +161,7 @@ struct connection {
 /* All options used within OpenVPN GUI */
 typedef struct {
     /* Array of configs to autostart */
-    const TCHAR **auto_connect;
+    WCHAR **auto_connect;
 
     /* Connection parameters */
     connection_t *conn;               /* Array of connection structure */

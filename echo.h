@@ -37,7 +37,7 @@ struct echo_msg {
     struct echo_msg_fp fp; /* keep this as the first element */
     wchar_t *title;
     wchar_t *text;
-    int txtlen;
+    size_t txtlen;
     int type;
     struct echo_msg_history *history;
 };

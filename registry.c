@@ -399,7 +399,7 @@ GetRegistryValueNumeric(HKEY regkey, const TCHAR *name, DWORD *data)
 int SetRegistryValue(HKEY regkey, const TCHAR *name, const TCHAR *data)
 {
   /* set a registry string */
-  DWORD size = (_tcslen(data) + 1) * sizeof(*data);
+  DWORD size = (DWORD) ((_tcslen(data) + 1) * sizeof(*data));
   if(RegSetValueEx(regkey, name, 0, REG_SZ, (PBYTE) data, size) != ERROR_SUCCESS)
     {
       /* Error writing registry value */
@@ -430,7 +430,7 @@ OpenConfigRegistryKey(const WCHAR *config_name, HKEY *regkey, BOOL create)
 {
     DWORD status;
     const WCHAR fmt[] = L"SOFTWARE\\OpenVPN-GUI\\configs\\%ls";
-    int count = (wcslen(config_name) + wcslen(fmt) + 1);
+    size_t count = (wcslen(config_name) + wcslen(fmt) + 1);
     WCHAR *name = malloc(count * sizeof(WCHAR));
 
     if (!name)

@@ -56,7 +56,7 @@ typedef struct {
 typedef struct mgmt_cmd {
     struct mgmt_cmd *prev, *next;
     char *command;
-    int size;
+    size_t size;
     mgmt_msg_func handler;
     mgmt_cmd_type type;
 } mgmt_cmd_t;

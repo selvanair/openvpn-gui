@@ -82,7 +82,7 @@ GetGUILanguage(void)
     if (status == ERROR_SUCCESS)
         GetRegistryValueNumeric(regkey, _T("ui_language"), &value);
 
-    gui_language = ( value != 0 ? value : GetUserDefaultUILanguage() );
+    gui_language = ( value != 0 ? (LANGID) value : GetUserDefaultUILanguage() );
     InitMUILanguage(gui_language);
     return gui_language;
 }
@@ -117,13 +117,13 @@ LocalizedTime(const time_t t, LPTSTR buf, size_t size)
 
     if (size > 0) {
         date_size = GetDateFormat(locale, DATE_SHORTDATE, &st, NULL,
-                                  buf, size);
+                                  buf, (int) size);
         if (date_size)
             buf[date_size - 1] = ' ';
     }
     if (size - date_size > 0) {
         time_size = GetTimeFormat(locale, TIME_NOSECONDS, &st, NULL,
-                                  buf + date_size, size - date_size);
+                                  buf + date_size, (int) (size - date_size));
     }
     return date_size + time_size;
 }
@@ -170,7 +170,7 @@ LoadStringLang(UINT stringId, LANGID langId, PTSTR buffer, int bufferSize, va_li
         _vsntprintf(buffer, bufferSize, formatStr, args);
         buffer[bufferSize - 1] = 0;
         free(formatStr);
-        return _tcslen(buffer);
+        return (int)_tcslen(buffer);
     }
 
 err:

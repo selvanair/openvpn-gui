@@ -169,7 +169,8 @@ ManagementCommandFromInput(connection_t *c, LPCSTR fmt, HWND hDlg, int id)
 {
     BOOL retval = FALSE;
     LPSTR input, cmd;
-    int input_len, cmd_len, pos;
+    int input_len, pos;
+    size_t cmd_len;
 
     GetDlgItemTextUtf8(hDlg, id, &input, &input_len);
 
@@ -220,7 +221,8 @@ ManagementCommandFromTwoInputsBase64(connection_t *c, LPCSTR fmt, HWND hDlg,int 
 {
     BOOL retval = FALSE;
     LPSTR input, input2, input_b64, input2_b64, cmd;
-    int input_len, input2_len, cmd_len;
+    int input_len, input2_len;
+    size_t cmd_len;
 
     input_b64 = NULL;
     input2_b64 = NULL;
@@ -275,7 +277,8 @@ ManagementCommandFromInputBase64(connection_t* c, LPCSTR fmt, HWND hDlg, int id)
 {
     BOOL retval = FALSE;
     LPSTR input, input_b64, cmd;
-    int input_len, cmd_len;
+    int input_len;
+    size_t cmd_len;
 
     input_b64 = NULL;
 

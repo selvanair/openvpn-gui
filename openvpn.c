@@ -162,8 +162,8 @@ OnLogLine(connection_t *c, char *line)
     /* Remove lines from log window if it is getting full */
     if (SendMessage(logWnd, EM_GETLINECOUNT, 0, 0) > MAX_LOG_LINES)
     {
-        int pos = SendMessage(logWnd, EM_LINEINDEX, DEL_LOG_LINES, 0);
-        SendMessage(logWnd, EM_SETSEL, 0, pos);
+        LRESULT pos = SendMessage(logWnd, EM_LINEINDEX, DEL_LOG_LINES, 0);
+        SendMessage(logWnd, EM_SETSEL, 0, (LPARAM) pos);
         SendMessage(logWnd, EM_REPLACESEL, FALSE, (LPARAM) _T(""));
     }
 
@@ -213,7 +213,7 @@ parse_assigned_ip(connection_t *c, const char *msg)
 
     /* Convert the IP address to Unicode */
     if (sep - msg > 0
-        && MultiByteToWideChar(CP_UTF8, 0, msg, sep-msg, c->ip, _countof(c->ip)-1) == 0)
+        && MultiByteToWideChar(CP_UTF8, 0, msg, (int)(sep-msg), c->ip, _countof(c->ip)-1) == 0)
     {
         WriteStatusLog(c, L"GUI> ", L"Failed to extract the assigned ipv4 address (error = %d)",
                        GetLastError());
@@ -1317,7 +1317,7 @@ format_bytecount(wchar_t *buf, size_t len, unsigned long long c)
 {
     const char *suf[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", NULL};
     const char **s = suf;
-    double x = c;
+    double x = (double) c;
 
     if (c <= 1024)
     {
@@ -1438,8 +1438,8 @@ WriteStatusLog (connection_t *c, const WCHAR *prefix, const WCHAR *line, BOOL fi
     /* Remove lines from log window if it is getting full */
     if (SendMessage(logWnd, EM_GETLINECOUNT, 0, 0) > MAX_LOG_LINES)
     {
-        int pos = SendMessage(logWnd, EM_LINEINDEX, DEL_LOG_LINES, 0);
-        SendMessage(logWnd, EM_SETSEL, 0, pos);
+        LRESULT pos = SendMessage(logWnd, EM_LINEINDEX, DEL_LOG_LINES, 0);
+        SendMessage(logWnd, EM_SETSEL, 0, (LPARAM) pos);
         SendMessage(logWnd, EM_REPLACESEL, FALSE, (LPARAM) _T(""));
     }
     /* Append line to log window */
@@ -1951,7 +1951,7 @@ ThreadOpenVPNStatus(void *p)
     HANDLE wait_event;
 
     CLEAR (msg);
-    srand(time(NULL));
+    srand((int)time(NULL));
 
     /* Cut of extention from config filename. */
     _tcsncpy(conn_name, c->config_file, _countof(conn_name));
@@ -2110,7 +2110,7 @@ StartOpenVPN(connection_t *c)
     /* Try to open the service pipe */
     if (use_iservice && InitServiceIO(&c->iserv))
     {
-        DWORD size = _tcslen(c->config_dir) + _tcslen(options) + sizeof(c->manage.password) + 3;
+        size_t size = _tcslen(c->config_dir) + _tcslen(options) + sizeof(c->manage.password) + 3;
         TCHAR startup_info[1024];
 
         if ( !AuthorizeConfig(c))
@@ -2131,7 +2131,7 @@ StartOpenVPN(connection_t *c)
             options, extra_options, L'\0', sizeof(c->manage.password), c->manage.password);
         c->manage.password[sizeof(c->manage.password) - 1] = '\0';
 
-        if (!WritePipe(c->iserv.pipe, startup_info, size * sizeof (TCHAR)))
+        if (!WritePipe(c->iserv.pipe, startup_info, (DWORD)(size * sizeof (TCHAR))))
         {
             ShowLocalizedMsg (IDS_ERR_WRITE_SERVICE_PIPE);
             CloseHandle(c->exit_event);
@@ -2325,7 +2325,7 @@ ReadLineFromStdOut(HANDLE hStdOut, char *line, DWORD size)
         char *pos = memchr(line, '\r', read);
         if (pos)
         {
-            len = pos - line + 2;
+            len = (DWORD)(pos - line + 2);
             if (len > size)
                 return FALSE;
             break;

@@ -157,7 +157,7 @@ AddUserToGroup (const WCHAR *group)
         _snwprintf(netcmd, size, L"%ls\\%ls", syspath, L"net.exe");
         netcmd[size-1] = L'\0';
     }
-    size = (wcslen(fmt) + wcslen(username) + 2*wcslen(group) + 2*wcslen(netcmd)+ 1);
+    size = (DWORD)(wcslen(fmt) + wcslen(username) + 2*wcslen(group) + 2*wcslen(netcmd)+ 1);
     if ((params = malloc (size*sizeof(WCHAR))) == NULL)
         return retval;
 
@@ -189,7 +189,7 @@ static BOOL
 CheckConfigPath (const WCHAR *config_dir)
 {
     BOOL ret = FALSE;
-    int size = wcslen(o.global_config_dir);
+    size_t size = wcslen(o.global_config_dir);
 
     /* if interactive service is not running, no access control: return TRUE */
     if (!CheckIServiceStatus(FALSE))

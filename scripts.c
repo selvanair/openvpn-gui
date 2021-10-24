@@ -51,9 +51,7 @@ RunPreconnectScript(connection_t *c)
     struct _stat st;
     int i;
 
-    /* Cut off extention from config filename and add "_pre.bat" */
-    int len = _tcslen(c->config_file) - _tcslen(o.ext_string) - 1;
-    _sntprintf_0(cmdline, _T("%ls\\%.*ls_pre.bat"), c->config_dir, len, c->config_file);
+    _sntprintf_0(cmdline, _T("%ls\\%ls_pre.bat"), c->config_dir, c->config_name);
 
     /* Return if no script exists */
     if (_tstat(cmdline, &st) == -1)
@@ -122,9 +120,7 @@ RunConnectScript(connection_t *c, int run_as_service)
     struct _stat st;
     int i;
 
-    /* Cut off extention from config filename and add "_up.bat" */
-    int len = _tcslen(c->config_file) - _tcslen(o.ext_string) - 1;
-    _sntprintf_0(cmdline, _T("%ls\\%.*ls_up.bat"), c->config_dir, len, c->config_file);
+    _sntprintf_0(cmdline, _T("%ls\\%ls_up.bat"), c->config_dir, c->config_name);
 
     /* Return if no script exists */
     if (_tstat(cmdline, &st) == -1)
@@ -215,9 +211,7 @@ RunDisconnectScript(connection_t *c, int run_as_service)
     struct _stat st;
     int i;
 
-    /* Cut off extention from config filename and add "_down.bat" */
-    int len = _tcslen(c->config_file) - _tcslen(o.ext_string) - 1;
-    _sntprintf_0(cmdline, _T("%ls\\%.*ls_down.bat"), c->config_dir, len, c->config_file);
+    _sntprintf_0(cmdline, _T("%ls\\%ls_down.bat"), c->config_dir, c->config_name);
 
     /* Return if no script exists */
     if (_tstat(cmdline, &st) == -1)

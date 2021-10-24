@@ -17,7 +17,7 @@
 #define ENTROPY_LEN 16
 
 static DWORD
-crypt_protect(BYTE *data, int szdata, char *entropy, BYTE **out)
+crypt_protect(BYTE *data, DWORD szdata, char *entropy, BYTE **out)
 {
     DATA_BLOB data_out;
     DATA_BLOB data_in;
@@ -26,7 +26,7 @@ crypt_protect(BYTE *data, int szdata, char *entropy, BYTE **out)
     data_in.pbData = data;
     data_in.cbData = szdata;
     e.pbData = (BYTE*) entropy;
-    e.cbData = entropy? strlen(entropy) : 0;
+    e.cbData = entropy? (DWORD) strlen(entropy) : 0;
 
     if(CryptProtectData(&data_in, NULL, &e, NULL, NULL, 0, &data_out))
     {
@@ -38,7 +38,7 @@ crypt_protect(BYTE *data, int szdata, char *entropy, BYTE **out)
 }
 
 static DWORD
-crypt_unprotect(BYTE *data, int szdata, char *entropy, BYTE **out)
+crypt_unprotect(BYTE *data, DWORD szdata, char *entropy, BYTE **out)
 {
     DATA_BLOB data_in;
     DATA_BLOB data_out = {0,0};
@@ -47,7 +47,7 @@ crypt_unprotect(BYTE *data, int szdata, char *entropy, BYTE **out)
     data_in.pbData = data;
     data_in.cbData = szdata;
     e.pbData = (BYTE *) entropy;
-    e.cbData = entropy? strlen(entropy) : 0;
+    e.cbData = entropy? (DWORD) strlen(entropy) : 0;
 
     if(CryptUnprotectData(&data_in, NULL, &e, NULL, NULL, 0, &data_out))
     {
@@ -100,7 +100,7 @@ static int
 save_encrypted(const WCHAR *config_name, const WCHAR *password, const WCHAR *name)
 {
     BYTE *out;
-    DWORD len = (wcslen(password) + 1) * sizeof(WCHAR);
+    DWORD len = (DWORD) ((wcslen(password) + 1) * sizeof(WCHAR));
     char entropy[ENTROPY_LEN+1];
 
     get_entropy(config_name, entropy, sizeof(entropy), true);
@@ -200,7 +200,7 @@ RecallAuthPass(const WCHAR *config_name, WCHAR *password)
 int
 SaveUsername(const WCHAR *config_name, const WCHAR *username)
 {
-    DWORD len = (wcslen(username) + 1) * sizeof(*username);
+    DWORD len = (DWORD) ((wcslen(username) + 1) * sizeof(*username));
     SetConfigRegistryValueBinary(config_name, AUTH_USER_DATA,(BYTE *) username, len);
     return 1;
 }

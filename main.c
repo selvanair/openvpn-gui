@@ -123,7 +123,7 @@ NotifyRunningInstance()
         config_data.dwData = o.action;
         if (o.action_arg)
         {
-            config_data.cbData = (wcslen(o.action_arg)+1)*sizeof(o.action_arg[0]);
+            config_data.cbData = (DWORD) (wcslen(o.action_arg)+1)*sizeof(o.action_arg[0]);
             config_data.lpData = (void *) o.action_arg;
         }
         PrintDebug(L"Instance 2: called with action %d : %ls", o.action, o.action_arg);
@@ -167,7 +167,7 @@ int WINAPI _tWinMain (HINSTANCE hThisInstance,
   /* a session local semaphore to detect second instance */
   HANDLE session_semaphore = InitSemaphore(L"Local\\"PACKAGE_NAME);
 
-  srand(time(NULL));
+  srand((unsigned int)time(NULL));
   /* try to lock the semaphore, else we are not the first instance */
   if (session_semaphore &&
       WaitForSingleObject(session_semaphore, 200) != WAIT_OBJECT_0)
@@ -342,7 +342,7 @@ int WINAPI _tWinMain (HINSTANCE hThisInstance,
       DeregisterEventSource(o.event_log);
 
   /* The program return-value is 0 - The value that PostQuitMessage() gave */
-  return messages.wParam;
+  return (int) messages.wParam;
 }
 
 
@@ -550,7 +550,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 
     case WM_MENUCOMMAND:
       /* Get the menu item id and save it in wParam for use below */
-      wParam = GetMenuItemID((HMENU) lParam, wParam);
+      wParam = GetMenuItemID((HMENU) lParam, (int) wParam);
 
       /* we first check global menu items which do not require a connnection index */
       if (LOWORD(wParam) == IDM_IMPORT_FILE) {

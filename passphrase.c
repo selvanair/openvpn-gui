@@ -57,7 +57,7 @@ GetRandomPassword(char *buf, size_t len)
     if (!CryptAcquireContext(&cp, NULL, NULL, PROV_DSS, CRYPT_VERIFYCONTEXT))
         return FALSE;
 
-    if (!CryptGenRandom(cp, len, (PBYTE) buf))
+    if (!CryptGenRandom(cp, (DWORD) len, (PBYTE) buf))
         goto out;
 
     /* Make sure all values are between 0x21 '!' and 0x7e '~' */
@@ -100,8 +100,8 @@ ConfirmNewPassword(HWND hwndDlg)
 /*
  * Return lengh of the new password
  */
-static int
-NewPasswordLengh(HWND hwndDlg)
+static size_t
+NewPasswordLength(HWND hwndDlg)
 {
   TCHAR newpsw[50];
 
@@ -372,13 +372,13 @@ ChangePassphraseDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, UNUSED LPARAM 
             }
 
           /* Confirm if the new password is empty. */
-          if (NewPasswordLengh(hwndDlg) == 0)
+          if (NewPasswordLength(hwndDlg) == 0)
             {
                if (ShowLocalizedMsgEx(MB_YESNO, NULL, _T(PACKAGE_NAME), IDS_NFO_EMPTY_PWD) == IDNO)
                   break;
             }
           /* Else check minimum length of password */
-          else if (NewPasswordLengh(hwndDlg) < MIN_PASSWORD_LEN)
+          else if (NewPasswordLength(hwndDlg) < MIN_PASSWORD_LEN)
             {
               ShowLocalizedMsg(IDS_ERR_PWD_TO_SHORT, MIN_PASSWORD_LEN);
               break;

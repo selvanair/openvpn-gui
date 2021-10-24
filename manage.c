@@ -94,11 +94,11 @@ SendCommand(connection_t *c)
     if (cmd == NULL || cmd->size == 0)
         return;
 
-    res = send(c->manage.sk, cmd->command, cmd->size, 0);
+    res = send(c->manage.sk, cmd->command, (int) cmd->size, 0);
     if (res < 1)
         return;
 
-    if (res != cmd->size)
+    if (res != (int) cmd->size)
         memmove(cmd->command, cmd->command + res, cmd->size - res);
 
     cmd->size -= res;
@@ -191,9 +191,10 @@ UnqueueCommand(connection_t *c)
 void
 OnManagement(SOCKET sk, LPARAM lParam)
 {
-    int res;
+    size_t res;
     char *data;
-    ULONG data_size, offset;
+    ULONG data_size;
+    size_t offset;
 
     connection_t *c = GetConnByManagement(sk);
     if (c == NULL)
@@ -229,7 +230,7 @@ OnManagement(SOCKET sk, LPARAM lParam)
             return;
 
         res = recv(c->manage.sk, data + c->manage.saved_size, data_size, 0);
-        if (res != (int) data_size)
+        if (res != (size_t) data_size)
         {
             free(data);
             return;
@@ -239,7 +240,7 @@ OnManagement(SOCKET sk, LPARAM lParam)
         if (c->manage.saved_size)
         {
             memcpy(data, c->manage.saved_data, c->manage.saved_size);
-            data_size += c->manage.saved_size;
+            data_size += (ULONG) c->manage.saved_size;
             free(c->manage.saved_data);
             c->manage.saved_data = NULL;
             c->manage.saved_size = 0;
