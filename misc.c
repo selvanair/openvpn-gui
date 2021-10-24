@@ -60,7 +60,7 @@ Base64Encode(const char *input, int input_len, char **output)
         flags, NULL, &output_len) || output_len == 0)
     {
 #ifdef DEBUG
-        PrintDebug (L"Error in CryptBinaryToStringA: input = '%.*S'", input_len, input);
+        PrintDebug (L"Error in CryptBinaryToStringA: input = '%.*hs'", input_len, input);
 #endif
         *output = NULL;
         return FALSE;
@@ -73,7 +73,7 @@ Base64Encode(const char *input, int input_len, char **output)
         flags, *output, &output_len))
     {
 #ifdef DEBUG
-        PrintDebug (L"Error in CryptBinaryToStringA: input = '%.*S'", input_len, input);
+        PrintDebug (L"Error in CryptBinaryToStringA: input = '%.*hs'", input_len, input);
 #endif
         free(*output);
         *output = NULL;
