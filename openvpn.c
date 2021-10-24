@@ -36,6 +36,14 @@
 #include <time.h>
 #include <commctrl.h>
 
+/* Try to use PRIu64 from headers */
+#ifdef HAVE_INTTYPES_H
+#include <inttypes.h>
+#endif
+#if !defined(PRIu64)
+#define PRIu64 "I64u"
+#endif
+
 #ifndef WM_DPICHANGED
 #define WM_DPICHANGED 0x02E0
 #endif
@@ -1313,7 +1321,7 @@ format_bytecount(wchar_t *buf, size_t len, unsigned long long c)
 
     if (c <= 1024)
     {
-        swprintf(buf, len, L"%I64u B", c);
+        swprintf(buf, len, L"%" TEXT(PRIu64) L" B", c);
         buf[len-1] = L'\0';
         return buf;
     }
@@ -1322,7 +1330,7 @@ format_bytecount(wchar_t *buf, size_t len, unsigned long long c)
         x /= 1024.0;
         s++;
     }
-    swprintf(buf, len, L"%I64u (%.1f %hs)", c, x, *s);
+    swprintf(buf, len, L"%" TEXT(PRIu64) L" (%.1f %hs)", c, x, *s);
     buf[len-1] = L'\0';
 
     return buf;
@@ -1334,7 +1342,7 @@ format_bytecount(wchar_t *buf, size_t len, unsigned long long c)
  */
 void OnByteCount(connection_t *c, char *msg)
 {
-    if (!msg || sscanf(msg, "%I64u,%I64u", &c->bytes_in, &c->bytes_out) != 2)
+    if (!msg || sscanf(msg, "%" PRIu64 ",%" PRIu64, &c->bytes_in, &c->bytes_out) != 2)
         return;
     wchar_t in[32], out[32];
     format_bytecount(in, _countof(in), c->bytes_in);

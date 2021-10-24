@@ -834,8 +834,15 @@ DWORD GetDllVersion(LPCTSTR lpszDllName)
     if(hinstDll)
     {
         DLLGETVERSIONPROC pDllGetVersion;
+#ifdef __MINGW32__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+#endif
         pDllGetVersion = (DLLGETVERSIONPROC)GetProcAddress(hinstDll,
                           "DllGetVersion");
+#ifdef __MINGW32__
+#pragma GCC diagnostic pop
+#endif
 
         /* Because some DLLs might not implement this function, you
         must test for it explicitly. Depending on the particular
