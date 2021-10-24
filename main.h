@@ -87,20 +87,22 @@ struct security_attributes
 /* clear an object */
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
-/* _sntprintf with guaranteed \0 termination */
-#define _sntprintf_0(buf, ...) \
+/* swprintf with guaranteed \0 termination */
+#define _swprintf_0(buf, ...) \
   do { \
-    __sntprintf_0(buf, _countof(buf), __VA_ARGS__); \
+    __swprintf_0(buf, _countof(buf), __VA_ARGS__); \
   } while(0);
 
+#define _sntprintf_0 _swprintf_0
+
 static inline int
-__sntprintf_0(TCHAR *buf, size_t size, TCHAR *format, ...)
+__swprintf_0(WCHAR *buf, size_t size, WCHAR *format, ...)
 {
     int i;
     va_list args;
     va_start(args, format);
-    i = _vsntprintf(buf, size, format, args);
-    buf[size - 1] = _T('\0');
+    i = vswprintf(buf, size, format, args);
+    buf[size - 1] = L'\0';
     va_end(args);
     return i;
 }
@@ -116,7 +118,7 @@ __snprintf_0(char *buf, size_t size, char *format, ...)
     int i;
     va_list args;
     va_start(args, format);
-    i = _vsnprintf(buf, size, format, args);
+    i = vsnprintf(buf, size, format, args);
     buf[size - 1] = '\0';
     va_end(args);
     return i;
