@@ -96,7 +96,7 @@ Base64Decode(const char *input, char **output)
 {
     DWORD len;
 
-    PrintDebug (L"decoding %S", input);
+    PrintDebug (L"decoding %hs", input);
     if (!CryptStringToBinaryA(input, 0, CRYPT_STRING_BASE64_ANY,
                               NULL, &len, NULL, NULL) || len == 0)
     {
@@ -118,7 +118,7 @@ Base64Decode(const char *input, char **output)
 
     /* NUL terminate output */
     (*output)[len] = '\0';
-    PrintDebug (L"Decoded output %S", *output);
+    PrintDebug (L"Decoded output %hs", *output);
 
     return len;
 }
@@ -510,11 +510,11 @@ wcs_concat2(WCHAR *dest, int len, const WCHAR *src1, const WCHAR *src2, const WC
         return;
 
     if (src1 && src2 && src1[0] && src2[0])
-        n = swprintf(dest, len, L"%s%s%s", src1, sep, src2);
+        n = swprintf(dest, len, L"%ls%ls%ls", src1, sep, src2);
     else if (src1 && src1[0])
-        n = swprintf(dest, len, L"%s", src1);
+        n = swprintf(dest, len, L"%ls", src1);
     else if (src2 && src2[0])
-        n = swprintf(dest, len, L"%s", src2);
+        n = swprintf(dest, len, L"%ls", src2);
 
     if (n < 0 || n >= len) /*swprintf failed */
         n = 0;
@@ -626,7 +626,7 @@ open_url(const wchar_t *url)
 
     if (ret <= (HINSTANCE) 32)
     {
-        MsgToEventLog(EVENTLOG_ERROR_TYPE, L"launch_url: ShellExecute <%s> returned error: %d", url, ret);
+        MsgToEventLog(EVENTLOG_ERROR_TYPE, L"launch_url: ShellExecute <%ls> returned error: %d", url, ret);
         return false;
     }
     return true;
