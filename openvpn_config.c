@@ -26,6 +26,7 @@
 #endif
 
 #include <windows.h>
+#include <ws2tcpip.h>
 
 #include "main.h"
 #include "openvpn-gui-res.h"
@@ -103,7 +104,7 @@ AddConfigFileToList(int config, const TCHAR *filename, const TCHAR *config_dir)
 
     c->manage.sk = INVALID_SOCKET;
     c->manage.skaddr.sin_family = AF_INET;
-    c->manage.skaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    inet_pton(AF_INET, "127.0.0.1", &c->manage.skaddr.sin_addr);
     c->manage.skaddr.sin_port = htons((o.mgmt_port_offset + config) & 0xFF);
 
 #ifndef DISABLE_CHANGE_PASSWORD

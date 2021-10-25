@@ -458,7 +458,7 @@ again:
         char tmp[256];
         DWORD len = sizeof(tmp);
         BOOL res = HttpQueryInfoA(hRequest, HTTP_QUERY_CONTENT_TYPE, tmp, &len, NULL);
-        if (!res || stricmp(comps->content_type, tmp))
+        if (!res || _stricmp(comps->content_type, tmp))
         {
             ShowLocalizedMsgEx(MB_OK, hWnd, _T(PACKAGE_NAME), IDS_ERR_URL_IMPORT_PROFILE, 0,
                                L"HTTP content-type mismatch");

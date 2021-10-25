@@ -645,8 +645,8 @@ ImportConfigFile(const TCHAR* source)
     _wsplitpath(source, NULL, NULL, fileName, ext);
 
     /* check if the source points to the config_dir */
-    if (wcsnicmp(source, o.global_config_dir, wcslen(o.global_config_dir)) == 0
-        || wcsnicmp(source, o.config_dir, wcslen(o.config_dir)) == 0)
+    if (_wcsnicmp(source, o.global_config_dir, wcslen(o.global_config_dir)) == 0
+        || _wcsnicmp(source, o.config_dir, wcslen(o.config_dir)) == 0)
     {
         ShowLocalizedMsg(IDS_ERR_IMPORT_SOURCE, source);
         return;
@@ -663,7 +663,7 @@ ImportConfigFile(const TCHAR* source)
 
     /* profile name must be unique: check whether a config by same name exists */
     connection_t *c = GetConnByName(fileName);
-    if (c && wcsnicmp(c->config_dir, o.config_dir, wcslen(o.config_dir)) == 0)
+    if (c && _wcsnicmp(c->config_dir, o.config_dir, wcslen(o.config_dir)) == 0)
     {
         /* Ask the user whether to replace the profile or not. */
         if (ShowLocalizedMsgEx(MB_YESNO, NULL, _T(PACKAGE_NAME), IDS_NFO_IMPORT_OVERWRITE, fileName) == IDNO)

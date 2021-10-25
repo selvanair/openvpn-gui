@@ -479,8 +479,8 @@ GetConnByName(const WCHAR *name)
 {
     for (int i = 0; i < o.num_configs; ++i)
     {
-        if (wcsicmp (o.conn[i].config_file, name) == 0
-            || wcsicmp(o.conn[i].config_name, name) == 0)
+        if (_wcsicmp (o.conn[i].config_file, name) == 0
+            || _wcsicmp(o.conn[i].config_name, name) == 0)
             return &o.conn[i];
     }
     return NULL;
@@ -757,7 +757,7 @@ CompareStringExpanded (const WCHAR *str1, const WCHAR *str2)
     ExpandString (str1_cpy, _countof(str1_cpy));
     ExpandString (str2_cpy, _countof(str2_cpy));
 
-    return wcsicmp (str1_cpy, str2_cpy);
+    return _wcsicmp (str1_cpy, str2_cpy);
 }
 
 /* Hide the password save options from user */

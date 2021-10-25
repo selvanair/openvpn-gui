@@ -35,6 +35,7 @@
 #include <richedit.h>
 #include <time.h>
 #include <commctrl.h>
+#include <ws2tcpip.h>
 
 /* Try to use PRIu64 from headers */
 #ifdef HAVE_INTTYPES_H
@@ -926,7 +927,7 @@ parse_dynamic_cr (const char *str, auth_param_t *param)
 {
     BOOL ret = FALSE;
     char *token[4] = {0};
-    char *p = strdup (str);
+    char *p = _strdup (str);
 
     int i;
     char *p1;
@@ -956,8 +957,8 @@ parse_dynamic_cr (const char *str, auth_param_t *param)
     param->flags |= FLAG_CR_TYPE_CRV1;
     param->flags |= strchr(token[0], 'E') ? FLAG_CR_ECHO : 0;
     param->flags |= strchr(token[0], 'R') ? FLAG_CR_RESPONSE : 0;
-    param->id = strdup(token[1]);
-    param->str = strdup(token[3]);
+    param->id = _strdup(token[1]);
+    param->str = _strdup(token[3]);
     if (!param->id || !param->str)
         goto out;
 
@@ -977,7 +978,7 @@ parse_crtext (const char* str, auth_param_t* param)
 {
     BOOL ret = FALSE;
     char* token[2] = { 0 };
-    char* p = strdup(str);
+    char* p = _strdup(str);
     char* p1;
 
     if (!param || !p) goto out;
@@ -997,7 +998,7 @@ parse_crtext (const char* str, auth_param_t* param)
     param->flags |= FLAG_CR_TYPE_CRTEXT;
     param->flags |= strchr(token[0], 'E') ? FLAG_CR_ECHO : 0;
     param->flags |= strchr(token[0], 'R') ? FLAG_CR_RESPONSE : 0;
-    param->str = strdup(token[1]);
+    param->str = _strdup(token[1]);
     if (!param->str)
         goto out;
 
@@ -1018,7 +1019,7 @@ static BOOL
 parse_input_request (const char *msg, auth_param_t *param)
 {
     BOOL ret = FALSE;
-    char *p = strdup (msg);
+    char *p = _strdup (msg);
     char *sep[4] = {" ", "'", " ", ""}; /* separators to use to break up msg */
     char *token[4];
 
@@ -1040,7 +1041,7 @@ parse_input_request (const char *msg, auth_param_t *param)
     if (strcmp (token[0], "Need") != 0)
         goto out;
 
-    if ((param->id = strdup(token[1])) == NULL)
+    if ((param->id = _strdup(token[1])) == NULL)
         goto out;
 
     if (strcmp(token[2], "password") == 0)
@@ -1056,7 +1057,7 @@ parse_input_request (const char *msg, auth_param_t *param)
         param->flags |= FLAG_STRING_PKCS11;
     }
 
-    param->str = strdup (token[3]);
+    param->str = _strdup (token[3]);
     if (param->str == NULL)
         goto out;
 
@@ -1133,7 +1134,7 @@ OnPassword(connection_t *c, char *msg)
             chstr += 5; /* beginning of dynamic CR string */
 
             /* Save the string for later processing during next Auth request */
-            c->dynamic_cr = strdup(chstr);
+            c->dynamic_cr = _strdup(chstr);
             if (c->dynamic_cr && (chstr =  strstr (c->dynamic_cr, "']")) != NULL)
                 *chstr = '\0';
 
@@ -1171,7 +1172,7 @@ OnPassword(connection_t *c, char *msg)
         {
             param->flags |= FLAG_CR_TYPE_SCRV1;
             param->flags |= (*(chstr + 3) != '0') ? FLAG_CR_ECHO : 0;
-            param->str = strdup(chstr + 5);
+            param->str = _strdup(chstr + 5);
             LocalizedDialogBoxParam(ID_DLG_AUTH_CHALLENGE, UserAuthDialogFunc, (LPARAM) param);
         }
         else
@@ -1585,7 +1586,7 @@ OnService(connection_t *c, UNUSED char *msg)
      * Duplicate the read buffer and queue the next read request
      * by calling HandleServiceIO with err = 0, bytes = 0.
      */
-    buf = wcsdup(c->iserv.readbuf);
+    buf = _wcsdup(c->iserv.readbuf);
     HandleServiceIO(0, 0, (LPOVERLAPPED) &c->iserv);
 
     if (buf == NULL) return;
@@ -2096,6 +2097,9 @@ StartOpenVPN(connection_t *c)
     /* Create a management interface password */
     GetRandomPassword(c->manage.password, sizeof(c->manage.password) - 1);
 
+    char man_host[16] = ""; /* 16 bytes enough for ipv4 address as ascii*/
+    inet_ntop(AF_INET, &c->manage.skaddr.sin_addr, man_host, _countof(man_host));
+
     /* Construct command line -- put log first */
     _sntprintf_0(cmdline, _T("openvpn --log%ls \"%ls\" --config \"%ls\" "
         "--setenv IV_GUI_VER \"%hs\" --setenv IV_SSO openurl,crtext --service %ls 0 --auth-retry interact "
@@ -2103,7 +2107,7 @@ StartOpenVPN(connection_t *c)
         "--management-hold"),
         (o.log_append ? _T("-append") : _T("")), c->log_path,
         c->config_file, PACKAGE_STRING, exit_event_name,
-        inet_ntoa(c->manage.skaddr.sin_addr), ntohs(c->manage.skaddr.sin_port),
+        man_host, ntohs(c->manage.skaddr.sin_port),
         (o.proxy_source != config ? _T("--management-query-proxy ") : _T("")));
 
     BOOL use_iservice = (o.iservice_admin && IsWindows7OrGreater()) || !IsUserAdmin();
