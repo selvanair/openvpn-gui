@@ -168,6 +168,7 @@ struct connection {
     struct pkcs11_list pkcs11_list;
     char daemon_state[20];         /* state of openvpn.ex: WAIT, AUTH, GET_CONFIG etc.. */
     int id;                        /* index of config -- treat as immutable once assigned */
+    BOOL disabled;                 /* if true, not shown in the menu */
     connection_t *next;
 };
 

@@ -75,15 +75,85 @@ CheckReadAccess (const TCHAR *dir, const TCHAR *file)
     return CheckFileAccess (path, GENERIC_READ);
 }
 
-static int
+static bool
 ConfigAlreadyExists(TCHAR *newconfig)
 {
     for (connection_t *c = o.chead; c; c = c->next)
     {
-        if (_tcsicmp(c->config_file, newconfig) == 0)
+        if (_tcsicmp(c->config_file, newconfig) == 0 && c->disabled == false)
+        {
             return true;
+        }
     }
     return false;
+}
+
+/*
+ * Check File at path exists. If filename is not NULL
+ * it is appended to path before checking.
+ */
+static bool
+FileExists(const wchar_t *path, const wchar_t *filename)
+{
+    wchar_t tmp[MAX_PATH];
+    if (filename)
+    {
+        _sntprintf_0(tmp, L"%ls\\%ls", path, filename);
+        path = tmp;
+    }
+    DWORD attr = GetFileAttributes(path);
+    return ((attr != INVALID_FILE_ATTRIBUTES) && !(attr & FILE_ATTRIBUTE_DIRECTORY));
+}
+
+/* Delete a connection profile and return its next value */
+static connection_t *
+DeleteConfig(connection_t *c)
+{
+    connection_t *next = c->next;
+    free(c);
+    return next;
+}
+
+/* Delete config entries if file missing on disk unless currently active */
+void
+PruneConfigs()
+{
+    connection_t *prev = NULL;
+    connection_t *c = o.chead;
+    while(c)
+    {
+        /* delete if no active connection thread or if missing on disk */
+        if (c->threadId || FileExists(c->config_dir, c->config_file))
+        {
+            prev = c;
+            c = c->next;
+            continue;
+        }
+        if (!prev) /* deleting head */
+        {
+            c = o.chead = DeleteConfig(c);
+        }
+        else
+        {
+            c = prev->next = DeleteConfig(c);
+        }
+    }
+    o.ctail = prev;
+}
+
+/* Mark configs with file missing on disk as disabled, unless active */
+void
+DisableConfigs()
+{
+    for (connection_t *c = o.chead; c; c = c->next)
+    {
+        if (c->threadId || FileExists(c->config_dir, c->config_file))
+        {
+            c->disabled = false; /* in case perviously disabled */
+            continue;
+        }
+        c->disabled = true;
+    }
 }
 
 static void
@@ -170,12 +240,21 @@ AddConfigFileToList(int group, const TCHAR *filename, const TCHAR *config_dir)
 /*
  * Create a new group with the given name as a child of the
  * specified parent group id and returns the id of the new group.
+ * If the group already exists, its id is returned instead.
  * If FLAG_ADD_CONFIG_GROUPS is not enabled, returns the
  * parent itself.
  */
 static int
 NewConfigGroup(const wchar_t *name, int parent, int flags)
 {
+    for (int i = 0; i < o.num_groups; i++)
+    {
+        if (o.groups[i].parent == parent && wcscmp(o.groups[i].name, name) == 0)
+        {
+            return i;
+        }
+    }
+
     if (!(flags & FLAG_ADD_CONFIG_GROUPS))
     {
         return parent;
@@ -226,6 +305,7 @@ ActivateConfigGroups(void)
      */
     for (connection_t *c = o.chead; c; c = c->next)
     {
+        if (c->disabled) continue;
         CONFIG_GROUP(c)->children++;
     }
 
@@ -250,6 +330,7 @@ ActivateConfigGroups(void)
      */
     for (connection_t *c = o.chead; c; c = c->next)
     {
+        if (c->disabled) continue;
         config_group_t *cg = CONFIG_GROUP(c);
 
         /* if not root and has only this config as child -- squash it */
@@ -264,6 +345,7 @@ ActivateConfigGroups(void)
     /* activate all groups that connect a config to the root */
     for (connection_t *c = o.chead; c; c = c->next)
     {
+        if (c->disabled) continue;
         config_group_t *cg = CONFIG_GROUP(c);
 
         while (cg)
@@ -411,7 +493,7 @@ BuildFileList()
 {
     static bool issue_warnings = true;
     int recurse_depth = 20; /* maximum number of levels below config_dir to recurse into */
-    int flags = 0;
+    int flags = FLAG_ADD_CONFIG_GROUPS;
     static int root_gp, system_gp, persistent_gp;
 
     if (o.silent_connection)
@@ -425,7 +507,6 @@ BuildFileList()
     if (!o.num_configs)
     {
         o.num_groups = 0;
-        flags |= FLAG_ADD_CONFIG_GROUPS;
         root_gp = NewConfigGroup(L"ROOT", -1, flags); /* -1 indicates no parent */
         persistent_gp = NewConfigGroup(L"Persistent Profiles", root_gp, flags);
         system_gp = NewConfigGroup(L"System Profiles", root_gp, flags);
@@ -442,6 +523,9 @@ BuildFileList()
     {
         flags |= FLAG_WARN_DUPLICATES | FLAG_WARN_MAX_CONFIGS;
     }
+
+    /* Diable any configs deleted from disk unless connection is active */
+    DisableConfigs();
 
     BuildFileList0 (o.config_dir, recurse_depth, root_gp, flags);
 

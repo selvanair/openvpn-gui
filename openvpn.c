@@ -2174,16 +2174,11 @@ static DWORD WINAPI
 ThreadOpenVPNStatus(void *p)
 {
     connection_t *c = p;
-    TCHAR conn_name[200];
     MSG msg;
     HANDLE wait_event;
 
     CLEAR (msg);
     srand(c->threadId);
-
-    /* Cut of extention from config filename. */
-    _tcsncpy(conn_name, c->config_file, _countof(conn_name));
-    conn_name[_tcslen(conn_name) - _tcslen(o.ext_string) - 1] = _T('\0');
 
     /* Create and Show Status Dialog */
     c->hwndStatus = CreateLocalizedDialogParam(ID_DLG_STATUS, StatusDialogFunc, (LPARAM) c);
@@ -2199,7 +2194,7 @@ ThreadOpenVPNStatus(void *p)
     CheckAndSetTrayIcon();
     SetMenuStatus(c, connecting);
     SetDlgItemText(c->hwndStatus, ID_TXT_STATUS, LoadLocalizedString(IDS_NFO_STATE_CONNECTING));
-    SetWindowText(c->hwndStatus, LoadLocalizedString(IDS_NFO_CONNECTION_XXX, conn_name));
+    SetWindowText(c->hwndStatus, LoadLocalizedString(IDS_NFO_CONNECTION_XXX, c->config_name));
 
     if (!OpenManagement(c))
     {
@@ -2271,6 +2266,7 @@ ThreadOpenVPNStatus(void *p)
     /* release handles etc.*/
     Cleanup (c);
     c->hwndStatus = NULL;
+    c->threadId = 0;
     return 0;
 }
 

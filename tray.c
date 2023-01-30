@@ -129,20 +129,21 @@ CreateMenuBitmaps(void)
  * o.num_config is reset to max space available value so that the
  * program can continue.
  */
-void
+static bool
 AllocateConnectionMenu()
 {
-    if (hmenu_size >= o.num_configs) return;
+    bool ret = true;
+    if (hmenu_size >= o.num_configs) return ret;
     HMENU *tmp  = (HMENU *) realloc(hMenuConn, sizeof(HMENU)*(o.num_configs + 50));
     if (tmp) {
         hmenu_size = o.num_configs + 50;
         hMenuConn = tmp;
     }
     else {
-        o.num_configs = hmenu_size;
-        MsgToEventLog(EVENTLOG_ERROR_TYPE, L"Allocation of hMenuConn failed. Ignoring configs beyond index = %d", o.num_configs);
+        MsgToEventLog(EVENTLOG_ERROR_TYPE, L"ERROR: Allocation of hMenuConn failed. Cannot create popup menu");
+        ret = false;
     }
-    return;
+    return ret;
 }
 
 /* Create popup menus */
@@ -159,7 +160,10 @@ CreatePopupMenus()
         return;
     }
 
-    AllocateConnectionMenu();
+    if (!AllocateConnectionMenu())
+    {
+        return;
+    }
 
     CreateMenuBitmaps();
     MENUINFO minfo = {.cbSize = sizeof(MENUINFO)};
@@ -252,6 +256,8 @@ CreatePopupMenus()
         for (connection_t *c = o.chead; c; c = c->next)
         {
             config_group_t *parent = &o.groups[0]; /* by default config is added to the root */
+
+            if (c->disabled) continue;
 
             if (USE_NESTED_CONFIG_MENU)
             {
