@@ -913,7 +913,11 @@ ParseManagementAddress(connection_t *c)
 
     ret = (addr->sin_port != 0);
 
-    if (ret && pw_file)
+    if (!ret)
+    {
+        MsgToEventLog(EVENTLOG_ERROR_TYPE,  L"Error parsing --management option: port not specified or invalid");
+    }
+    else if (pw_file)
     {
         if (PathIsRelativeW(pw_file))
         {
@@ -928,6 +932,7 @@ ParseManagementAddress(connection_t *c)
         if (!fp
             || !fgets(c->manage.password, sizeof(c->manage.password), fp))
         {
+            MsgToEventLog(EVENTLOG_ERROR_TYPE,  L"Error processing --management option: failed to read password file <%ls>", pw_file);
             /* This may be normal as not all users may be given access to this secret */
             ret = false;
         }
