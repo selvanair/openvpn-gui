@@ -86,14 +86,34 @@ free_auth_param(auth_param_t *param)
     free(param);
 }
 
+/*
+ * Append string to the text of a window or control
+ * hwnd   Handle to the window or dialog box
+ * id     Identifier of the control with title or text to change
+ *        If id = 0, text of the window hwnd is changed
+ * str    The string to append
+ */
+static void
+AppendWindowText(HWND hwnd, int id, const WCHAR *str)
+{
+    HWND hwndOut = id ? GetDlgItem(hwnd, id) : hwnd;
+    size_t len = GetWindowTextLengthW(hwndOut) + wcslen(str) + 1;
+
+    WCHAR *buf  = malloc(len * sizeof(*buf));
+    if (buf)
+    {
+        GetWindowTextW(hwndOut, buf, len);
+        wcsncat_s(buf, len, str, _TRUNCATE);
+        SetWindowTextW(hwndOut, buf);
+    }
+
+    free(buf);
+}
+
 void
 AppendTextToCaption(HANDLE hwnd, const WCHAR *str)
 {
-    WCHAR old[256];
-    WCHAR new[256];
-    GetWindowTextW(hwnd, old, _countof(old));
-    _sntprintf_0(new, L"%ls (%ls)", old, str);
-    SetWindowText(hwnd, new);
+    AppendWindowText(hwnd, 0, str);
 }
 
 /*
@@ -588,7 +608,7 @@ UserAuthDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             if (RecallAuthPass(param->c->config_name, password))
             {
                 SetDlgItemTextW(hwndDlg, ID_EDT_AUTH_PASS, password);
-                if (username[0] != L'\0' && !(param->flags & FLAG_CR_TYPE_SCRV1)
+                if (username[0] != L'\0' && !(param->flags & (FLAG_CR_TYPE_SCRV1|FLAG_CR_CONCAT))
                     && password[0] != L'\0' && param->c->failed_auth_attempts == 0)
                 {
                     /* user/pass available and no challenge response needed: skip dialog
@@ -604,7 +624,7 @@ UserAuthDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                 {
                     SendMessage(GetDlgItem(hwndDlg, ID_EDT_AUTH_PASS), EM_SETSEL, 0, MAKELONG(0, -1));
                 }
-                else if (param->flags & FLAG_CR_TYPE_SCRV1)
+                else if (param->flags & (FLAG_CR_TYPE_SCRV1|FLAG_CR_CONCAT))
                 {
                     SetFocus(GetDlgItem(hwndDlg, ID_EDT_AUTH_CHALLENGE));
                 }
@@ -661,7 +681,7 @@ UserAuthDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                         /* enable OK button only if username and either password or response are filled */
                         BOOL enableOK = GetWindowTextLength(GetDlgItem(hwndDlg, ID_EDT_AUTH_USER))
                                         && (GetWindowTextLength(GetDlgItem(hwndDlg, ID_EDT_AUTH_PASS))
-                                            || ((param->flags & FLAG_CR_TYPE_SCRV1)
+                                            || ((param->flags & (FLAG_CR_TYPE_SCRV1|FLAG_CR_CONCAT))
                                                 && GetWindowTextLength(GetDlgItem(hwndDlg, ID_EDT_AUTH_CHALLENGE)))
                                             );
                         EnableWindow(GetDlgItem(hwndDlg, IDOK), enableOK);
@@ -708,6 +728,10 @@ UserAuthDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                         SecureZeroMemory(password, sizeof(password));
                     }
                     ManagementCommandFromInput(param->c, "username \"Auth\" \"%s\"", hwndDlg, ID_EDT_AUTH_USER);
+                    if (params->flags & FLAG_CR_CONCAT)
+                    {
+                         AppendWindowText(hwndDlg, ID_EDIT_AUTH_PASS, GetDlgItemTextW(ID_EDT_AUTH_CHALENGE));
+                    }
                     if (param->flags & FLAG_CR_TYPE_SCRV1)
                     {
                         ManagementCommandFromTwoInputsBase64(param->c, "password \"Auth\" \"SCRV1:%s:%s\"", hwndDlg, ID_EDT_AUTH_PASS, ID_EDT_AUTH_CHALLENGE);
@@ -1349,6 +1373,10 @@ OnEcho(connection_t *c, char *msg)
     {
         echo_msg_process(c, timestamp, msg);
     }
+    else if (strbegins(msg, "totp-concat"))
+    {
+        c->flags &= FLAG_TOTP_CONCAT;
+    }
     else
     {
         wchar_t errmsg[256];
@@ -1416,6 +1444,12 @@ OnPassword(connection_t *c, char *msg)
             param->flags |= FLAG_CR_TYPE_SCRV1;
             param->flags |= (*(chstr + 3) != '0') ? FLAG_CR_ECHO : 0;
             param->str = strdup(chstr + 5);
+            LocalizedDialogBoxParamEx(ID_DLG_AUTH_CHALLENGE, c->hwndStatus, UserAuthDialogFunc, (LPARAM) param);
+        }
+        else if (c->flags & FLAG_TOTP_CONCAT)
+        {
+            param->flags |= FLAG_CR_ECHO | FLAG_CR_CONCAT;
+            param->str = strdup("Input OTP");
             LocalizedDialogBoxParamEx(ID_DLG_AUTH_CHALLENGE, c->hwndStatus, UserAuthDialogFunc, (LPARAM) param);
         }
         else
