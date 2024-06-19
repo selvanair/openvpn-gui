@@ -713,6 +713,9 @@ UserAuthDialogFunc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                         {
                             GetDlgItemTextW(hwndDlg, ID_EDT_AUTH_CHALLENGE, password + wcslen(password), _countof(password)-wcslen(password));
                             SetDlgItemTextW(hwndDlg, ID_EDT_AUTH_PASS, password);
+                            /* erase potentially secret contents in the response text box */
+                            memset(password, L'x', wcslen(password));
+                            SetDlgItemTextW(hwndDlg, ID_EDT_AUTH_CHALLENGE, password);
                         }
 
                         SecureZeroMemory(password, sizeof(password));
