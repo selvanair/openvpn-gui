@@ -800,12 +800,16 @@ AboutDialogFunc(UNUSED HWND hDlg, UINT msg, UNUSED WPARAM wParam, LPARAM lParam)
 {
     LPPSHNOTIFY psn;
     wchar_t tmp1[300], tmp2[300];
+    wchar_t *year;
     switch (msg)
     {
         case WM_INITDIALOG:
             if (GetDlgItemText(hDlg, ID_TXT_VERSION, tmp1, _countof(tmp1)))
             {
                 _sntprintf_0(tmp2, tmp1, TEXT(PACKAGE_VERSION_RESOURCE_STR));
+                year = wcsstr(tmp2, L"2024");
+                if (year)
+                    memcpy(year, L"2025", 8);
                 SetDlgItemText(hDlg, ID_TXT_VERSION, tmp2);
             }
             /* Modify the ABOUT3 line that reads as "OpenVPN ... " by
@@ -820,6 +824,15 @@ AboutDialogFunc(UNUSED HWND hDlg, UINT msg, UNUSED WPARAM wParam, LPARAM lParam)
                 _sntprintf_0(tmp2, L"%lsv%hs %ls", prefix, o.ovpn_version, tmp1 + wcslen(prefix));
                 SetDlgItemText(hDlg, ID_LTEXT_ABOUT3, tmp2);
             }
+            /* Add copyright-year end for core */
+            if (GetDlgItemText(hDlg, ID_LTEXT_ABOUT4, tmp1, _countof(tmp1)))
+            {
+                year = wcsstr(tmp1, L"2024");
+                if (year)
+                    memcpy(year, L"2025", 8);
+                SetDlgItemText(hDlg, ID_LTEXT_ABOUT4, tmp1);
+            }
+
             break;
 
         case WM_NOTIFY:
