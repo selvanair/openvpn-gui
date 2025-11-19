@@ -1,6 +1,7 @@
 option(CLI_OVPN3 "Build ${PROJECT_NAME} with OpenVPN3 support" OFF)
 
 cmake_minimum_required(VERSION 3.10)
+set(CMAKE_SYSTEM_VERSION "6.1")
 
 project(openvpn-gui C CXX)
 
