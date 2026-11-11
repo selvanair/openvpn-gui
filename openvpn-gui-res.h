@@ -344,6 +344,7 @@
 #define IDS_ERR_REMOTE_LIST             2173
 #define IDS_REMOTE_LIST_PARTIAL         2174
 #define IDS_REMOTE_LIST_EMPTY           2175
+#define IDS_NFO_AUTO_REMOTE             2176
 
 /* openvpn daemon state descriptions */
 /* Needs to be kept in sync with daemon_states[] in openvpn.c */

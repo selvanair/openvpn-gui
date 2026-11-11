@@ -515,7 +515,7 @@ typedef struct autoclose
 } autoclose;
 
 /* Cancel scheduled auto close of a dialog */
-static void
+void
 AutoCloseCancel(HWND hwnd)
 {
     autoclose *ac = (autoclose *)GetProp(hwnd, L"AutoClose");
@@ -564,7 +564,7 @@ AutoCloseHandler(HWND hwnd, UINT UNUSED msg, UINT_PTR id, DWORD now)
  * Call AutoCloseCancel to cancel the scheduled event and clear the displayed
  * text.
  */
-static void
+void
 AutoCloseSetup(HWND hwnd, UINT btn, UINT timeout, UINT txtid, UINT txtres)
 {
     if (timeout == 0)

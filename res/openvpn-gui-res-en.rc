@@ -552,6 +552,7 @@ OpenVPN is probably not installed"
     IDS_ERR_REMOTE_LIST "Unable to retrieve the complete server list. Reconnect to try again."
     IDS_REMOTE_LIST_PARTIAL "Server list incomplete. Only received servers are shown."
     IDS_REMOTE_LIST_EMPTY "No servers available. Cancel and reconnect to try again."
+    IDS_NFO_AUTO_REMOTE "Connecting in %u seconds. Click or scroll to stop countdown."
 
     /* PLAP related */
     IDS_NFO_STATE_RETRYING "Retrying"

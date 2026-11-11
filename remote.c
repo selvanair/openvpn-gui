@@ -38,6 +38,7 @@
 extern options_t o;
 
 static const wchar_t *hfontProp = L"header_font";
+static const wchar_t *remoteDialogProp = L"remote_dialog";
 
 #define MIN_REQ_MGMT_VERSION 4
 #define MIN(a, b)            ((a) < (b) ? (a) : (b))
@@ -50,7 +51,14 @@ static const wchar_t *hfontProp = L"header_font";
 #define STATE_FAILED         16
 #define STATE_COUNT_READY    32
 #define STATE_PARTIAL        64
-#define REMOTE_LIST_TIMER    1
+#define REMOTE_LIST_TIMER    2 /* AutoCloseSetup uses timer 1. */
+
+struct remote_dialog
+{
+    connection_t *c;
+    bool interacted; /* User interacted with the dialog */
+    bool countdown;  /* Auto submit count down active */
+};
 
 struct remote_entry
 {
@@ -159,8 +167,9 @@ OnRemote(connection_t *c, char *msg)
         strncpy_s(rl->current, sizeof(rl->current), msg, _TRUNCATE);
         rl->selected = (UINT)-1; /* set selection to an invalid index */
 
+        struct remote_dialog dialog = { .c = c };
         INT_PTR result = LocalizedDialogBoxParamEx(
-            ID_DLG_REMOTE_QUERY, c->hwndStatus, QueryRemoteDialogProc, (LPARAM)c);
+            ID_DLG_REMOTE_QUERY, c->hwndStatus, QueryRemoteDialogProc, (LPARAM)&dialog);
         if (result == -1)
         {
             MsgToEventLog(EVENTLOG_ERROR_TYPE,
@@ -368,6 +377,19 @@ remote_dialog_failed(HWND hwnd, connection_t *c)
     StopOpenVPN(c);
 }
 
+/* Remember input during list loading as well as during the countdown. */
+static void
+remote_cancel_auto_submit(HWND hwnd)
+{
+    struct remote_dialog *dialog = (struct remote_dialog *)GetPropW(hwnd, remoteDialogProp);
+    if (dialog)
+    {
+        dialog->interacted = true;
+        dialog->countdown = false;
+    }
+    AutoCloseCancel(hwnd);
+}
+
 /* Dialog proc for querying remote */
 static INT_PTR CALLBACK
 QueryRemoteDialogProc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -377,8 +399,9 @@ QueryRemoteDialogProc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
     switch (msg)
     {
         case WM_INITDIALOG:
-            c = (connection_t *)lParam;
-            TRY_SETPROP(hwndDlg, cfgProp, (HANDLE)lParam);
+            c = ((struct remote_dialog *)lParam)->c;
+            TRY_SETPROP(hwndDlg, cfgProp, (HANDLE)c);
+            TRY_SETPROP(hwndDlg, remoteDialogProp, (HANDLE)lParam);
             SetStatusWinIcon(hwndDlg, ID_ICO_APP);
 
             if (remote_listview_init(hwndDlg))
@@ -397,6 +420,13 @@ QueryRemoteDialogProc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                 remote_dialog_failed(hwndDlg, c);
             }
             return TRUE;
+
+        case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN:
+        case WM_NCLBUTTONDOWN:
+        case WM_NCRBUTTONDOWN:
+            remote_cancel_auto_submit(hwndDlg);
+            break;
 
         case WM_COMMAND:
             if (LOWORD(wParam) == IDOK)
@@ -429,14 +459,38 @@ QueryRemoteDialogProc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             break;
 
         case WM_NOTIFY:
-            TRY_GETPROP(hwndDlg, cfgProp, c, FALSE);
-            /* On clicking any column toggle sorting between original vs alphabetical */
-            if (((LPNMHDR)lParam)->code == LVN_COLUMNCLICK)
+            if (((LPNMHDR)lParam)->idFrom != ID_LVW_REMOTE)
             {
-                HWND lv = GetDlgItem(hwndDlg, ID_LVW_REMOTE);
-                c->remote_list.show_sorted = !c->remote_list.show_sorted;
-                ListView_SortItems(lv, remote_entry_compare, (LPARAM)&c->remote_list);
-                return TRUE;
+                break;
+            }
+            switch (((LPNMHDR)lParam)->code)
+            {
+                case NM_CLICK:
+                case NM_RCLICK:
+                case LVN_KEYDOWN:
+                    remote_cancel_auto_submit(hwndDlg);
+                    break;
+
+                case LVN_BEGINSCROLL:
+                {
+                    struct remote_dialog *dialog;
+                    TRY_GETPROP(hwndDlg, remoteDialogProp, dialog, FALSE);
+                    /* Initial EnsureVisible runs before the countdown is armed. */
+                    if (dialog->countdown)
+                    {
+                        remote_cancel_auto_submit(hwndDlg);
+                    }
+                    break;
+                }
+
+                case LVN_COLUMNCLICK:
+                    remote_cancel_auto_submit(hwndDlg);
+                    TRY_GETPROP(hwndDlg, cfgProp, c, FALSE);
+                    /* Toggle sorting between original and alphabetical order. */
+                    HWND lv = GetDlgItem(hwndDlg, ID_LVW_REMOTE);
+                    c->remote_list.show_sorted = !c->remote_list.show_sorted;
+                    ListView_SortItems(lv, remote_entry_compare, (LPARAM)&c->remote_list);
+                    return TRUE;
             }
             break;
 
@@ -453,7 +507,10 @@ QueryRemoteDialogProc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             if (GetDlgCtrlID((HWND)lParam) == ID_TXT_WARNING)
             {
                 HBRUSH br = (HBRUSH)DefWindowProc(hwndDlg, msg, wParam, lParam);
-                SetTextColor((HDC)wParam, o.clr_warning);
+                struct remote_dialog *dialog;
+                TRY_GETPROP(hwndDlg, remoteDialogProp, dialog, FALSE);
+                SetTextColor((HDC)wParam,
+                             dialog->countdown ? GetSysColor(COLOR_WINDOWTEXT) : o.clr_warning);
                 return (INT_PTR)br;
             }
             break;
@@ -465,7 +522,9 @@ QueryRemoteDialogProc(HWND hwndDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             return TRUE;
 
         case WM_NCDESTROY:
+            AutoCloseCancel(hwndDlg);
             KillTimer(hwndDlg, REMOTE_LIST_TIMER);
+            RemovePropW(hwndDlg, remoteDialogProp);
             RemovePropW(hwndDlg, cfgProp);
             HFONT hf = (HFONT)GetPropW(hwndDlg, hfontProp);
             if (hf)
@@ -748,6 +807,12 @@ remote_listview_fill(HWND hwnd, UINT UNUSED msg, UINT_PTR id, DWORD UNUSED now)
         listview_set_column_width(lv);
         SetFocus(lv);
         KillTimer(hwnd, id);
+        struct remote_dialog *dialog = (struct remote_dialog *)GetPropW(hwnd, remoteDialogProp);
+        if (dialog && !dialog->interacted && !(rl->state & STATE_PARTIAL))
+        {
+            dialog->countdown = true;
+            AutoCloseSetup(hwnd, IDOK, 6, ID_TXT_WARNING, IDS_NFO_AUTO_REMOTE);
+        }
     }
     else                       /* request list update and set a timer to call this routine again */
     {
